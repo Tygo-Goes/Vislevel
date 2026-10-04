@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b2a2e">
+<title>VisLevel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0b2a2e;--card:#103c42;--card2:#164b52;--ink:#eaf6f4;--mute:#8fb8b6;--acc:#f2b84b;--ok:#5fd1b0;--bad:#ff8f7a;--r:18px}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{font-family:'Bricolage Grotesque',system-ui,sans-serif;background:var(--bg);color:var(--ink);padding-top:env(safe-area-inset-top)}
+#app{max-width:520px;margin:0 auto;padding:16px 16px 110px}
+h1{font-size:2rem;font-weight:800}h2{font-size:1.25rem;font-weight:800;margin:20px 0 10px}
+.mute{color:var(--mute)}
+.card{background:var(--card);border-radius:var(--r);padding:16px;margin-bottom:12px}
+.hero{background:linear-gradient(160deg,var(--card2),var(--card));padding:20px}
+.big{font-size:3rem;font-weight:800;line-height:1;color:var(--acc)}
+.bar{height:14px;background:#0b2a2e;border-radius:99px;overflow:hidden;margin:12px 0 6px}
+.bar i{display:block;height:100%;background:var(--acc);border-radius:99px;transition:width .6s}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.grid .card{margin:0}.grid b{font-size:1.5rem;display:block}
+label{display:block;margin:14px 0 6px;color:var(--mute);font-size:.95rem}
+input{width:100%;font:inherit;font-size:1.1rem;padding:14px;border-radius:14px;border:2px solid transparent;background:#0b2a2e;color:var(--ink)}
+input:focus{outline:none;border-color:var(--acc)}
+button{font:inherit;font-weight:800;font-size:1.1rem;border:0;border-radius:14px;padding:16px;width:100%;background:var(--acc);color:#2a1d00;margin-top:16px;cursor:pointer}
+button.ghost{background:transparent;color:var(--mute);border:2px solid var(--card2)}
+button.small{width:auto;padding:6px 10px;font-size:.85rem;margin:0}
+.row{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.xp{color:var(--acc);font-weight:800}
+.err{color:var(--bad);margin-top:10px;min-height:1.2em}
+.preview{background:#0b2a2e;border-radius:14px;padding:14px;margin-top:18px}
+.preview .t{font-size:1.6rem;font-weight:800;color:var(--acc)}
+nav{position:fixed;left:0;right:0;bottom:0;background:var(--card);display:flex;justify-content:center;padding-bottom:env(safe-area-inset-bottom);border-top:1px solid var(--card2)}
+nav div{display:flex;width:100%;max-width:520px}
+nav a{flex:1;text-align:center;padding:12px 4px;color:var(--mute);font-size:.8rem;cursor:pointer}
+nav a span{display:block;font-size:1.5rem}
+nav a.on{color:var(--acc)}
+.login{padding-top:12vh}
+.rank{font-size:1.6rem;width:36px}
+.hidden{display:none}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<nav id="nav" class="hidden"><div>
+<a data-v="home"><span>🏠</span>Home</a><a data-v="add"><span>🎣</span>Vangst</a>
+<a data-v="list"><span>🐟</span>Mijn vangsten</a><a data-v="rank"><span>🏆</span>Ranglijst</a><a data-v="me"><span>👤</span>Profiel</a>
+</div></nav>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getFirestore, collection, addDoc, deleteDoc, doc, setDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+/* ====== STAP 5: plak hier jouw Firebase-gegevens ====== */
+const firebaseConfig = {
+  apiKey: "AIzaSyBRBrVE4WXYiaZzJ0cGJTVWs31OuSR7jo8",
+  authDomain: "vis-level.firebaseapp.com",
+  projectId: "vis-level",
+  appId: "1:437730865914:web:9ab4026f2a8a9754e40f43"
+};
+/* ====================================================== */
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app), db = getFirestore(app);
+
+const FISH = {Voorntje:[10,1],Rietvoorn:[15,1],Kolblei:[15,1],Bliek:[20,1],Brasem:[30,1],Giebel:[30,1],Baars:[40,1],Zeelt:[50,2],Winde:[50,2],Kroeskarper:[50,2],Paling:[75,2],Karper:[75,2],Schubkarper:[75,2],Snoek:[100,2],Spiegelkarper:[100,2],Roofblei:[100,3],Graskarper:[125,3],Snoekbaars:[125,3],Meerval:[250,3],Rivierkreeft:[25,1]};
+const LEVELS = [[0,"Beginner"],[100,"Starter"],[250,"Visser"],[500,"Gevorderd"],[1000,"Ervaren"],[1750,"Specialist"],[2750,"Pro Visser"],[4000,"Expert"],[5500,"Meester Visser"],[7500,"Legende"],[10000,"Visbaas"],[15000,"Visgod"]];
+
+const calc = (soort, cm, kg) => {
+  const f = FISH[soort]; if (!f) return null;
+  const l = Math.round(cm * f[1]), w = Math.round(kg * 10);
+  return { basis: f[0], lengte: l, gewicht: w, totaal: f[0] + l + w };
+};
+const level = xp => {
+  let i = 0; LEVELS.forEach((l, n) => { if (xp >= l[0]) i = n; });
+  const next = LEVELS[i + 1];
+  return { nr: i + 1, naam: LEVELS[i][1], from: LEVELS[i][0], next: next ? next[0] : null };
+};
+const num = s => parseFloat(String(s).replace(",", "."));
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fmt = n => Number(n).toLocaleString("nl-NL");
+const today = () => new Date().toISOString().slice(0, 10);
+const nlDate = d => d.split("-").reverse().join("-");
+
+let user = null, catches = [], view = "home", unsub = null, usersMap = {};
+
+/* ---------- Auth ---------- */
+onAuthStateChanged(auth, u => {
+  user = u;
+  if (unsub) { unsub(); unsub = null; }
+  if (!u) { $("#nav").classList.add("hidden"); return loginView(); }
+  $("#nav").classList.remove("hidden");
+  setDoc(doc(db, "users", u.uid), { naam: u.displayName || u.email, email: u.email }, { merge: true }).catch(() => {});
+  const u1 = onSnapshot(collection(db, "users"), s => { usersMap = {}; s.forEach(d => usersMap[d.id] = d.data().naam); render(); });
+  const u2 = onSnapshot(collection(db, "catches"), s => {
+    catches = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.datum.localeCompare(a.datum) || 0);
+    render();
+  }, e => console.error(e));
+  unsub = () => { u1(); u2(); };
+});
+
+function loginView(mode = "in") {
+  const reg = mode === "reg";
+  $("#app").innerHTML = `<div class="login"><h1>🎣 VisLevel</h1><p class="mute">Vang vis, verdien XP, versla je maat.</p>
+  ${reg ? `<label>Naam</label><input id="naam" autocomplete="name">` : ""}
+  <label>E-mail</label><input id="em" type="email" autocomplete="email">
+  <label>Wachtwoord</label><input id="pw" type="password" autocomplete="${reg ? "new-password" : "current-password"}">
+  <div class="err" id="err"></div>
+  <button id="go">${reg ? "Account maken" : "Inloggen"}</button>
+  <button class="ghost" id="sw">${reg ? "Ik heb al een account" : "Account maken"}</button></div>`;
+  $("#sw").onclick = () => loginView(reg ? "in" : "reg");
+  $("#go").onclick = async () => {
+    try {
+      const em = $("#em").value.trim(), pw = $("#pw").value;
+      if (reg) {
+        const naam = $("#naam").value.trim(); if (!naam) throw { code: "naam" };
+        const c = await createUserWithEmailAndPassword(auth, em, pw);
+        await updateProfile(c.user, { displayName: naam });
+        await setDoc(doc(db, "users", c.user.uid), { naam, email: em });
+      } else await signInWithEmailAndPassword(auth, em, pw);
+    } catch (e) {
+      const m = { naam: "Vul je naam in.", "auth/invalid-credential": "E-mail of wachtwoord klopt niet.", "auth/email-already-in-use": "Dit e-mailadres heeft al een account.", "auth/weak-password": "Kies een wachtwoord van minimaal 6 tekens.", "auth/invalid-email": "Dit e-mailadres is ongeldig." };
+      $("#err").textContent = m[e.code] || "Inloggen mislukt. Controleer je gegevens en probeer het opnieuw.";
+    }
+  };
+}
+
+/* ---------- Data ---------- */
+function stats() {
+  const by = {};
+  catches.forEach(c => { (by[c.userId] ||= { id: c.userId, xp: 0, n: 0, soorten: new Set(), maxL: null, maxW: null }); const s = by[c.userId];
+    s.xp += c.xp; s.n++; s.soorten.add(c.soort);
+    if (!s.maxL || c.lengte > s.maxL.lengte) s.maxL = c;
+    if (!s.maxW || c.gewicht > s.maxW.gewicht) s.maxW = c; });
+  Object.keys(usersMap).forEach(id => by[id] ||= { id, xp: 0, n: 0, soorten: new Set(), maxL: null, maxW: null });
+  return by;
+}
+const nameOf = id => usersMap[id] || "Visser";
+
+/* ---------- Views ---------- */
+function render() {
+  if (!user) return;
+  document.querySelectorAll("nav a").forEach(a => a.classList.toggle("on", a.dataset.v === view));
+  if (view === "add" && $("#fish")) return; // niet het formulier wissen tijdens typen
+  ({ home, add: addView, list: listView, rank: rankView, me: meView })[view]();
+}
+document.querySelectorAll("nav a").forEach(a => a.onclick = () => { view = a.dataset.v; if (view === "add") $("#app").innerHTML = ""; render(); window.scrollTo(0, 0); });
+
+function home() {
+  const s = stats()[user.uid] || { xp: 0, n: 0, soorten: new Set() }, L = level(s.xp);
+  const pct = L.next ? Math.min(100, (s.xp - L.from) / (L.next - L.from) * 100) : 100;
+  $("#app").innerHTML = `<h1>Hoi ${esc(user.displayName || "visser")} 👋</h1>
+  <div class="card hero"><div class="mute">Level ${L.nr} · ${L.naam}</div><div class="big">${fmt(s.xp)} XP</div>
+  <div class="bar"><i style="width:${pct}%"></i></div>
+  <div class="mute">${L.next ? `${fmt(L.next - s.xp)} XP tot level ${L.nr + 1}` : "Hoogste level bereikt"}</div></div>
+  <div class="grid">
+  <div class="card"><b>${s.n}</b><span class="mute">Vangsten</span></div>
+  <div class="card"><b>${s.soorten.size}</b><span class="mute">Soorten</span></div>
+  <div class="card"><b>${s.maxL ? s.maxL.lengte + " cm" : "–"}</b><span class="mute">Grootste vis</span></div>
+  <div class="card"><b>${s.maxW ? s.maxW.gewicht + " kg" : "–"}</b><span class="mute">Zwaarste vis</span></div></div>
+  ${s.n ? "" : `<p class="mute" style="margin-top:16px">Nog geen vangsten. Tik op Vangst en sla je eerste vis op.</p>`}`;
+}
+
+function addView() {
+  $("#app").innerHTML = `<h1>Vangst toevoegen</h1>
+  <label>Vissoort</label><input id="fish" list="fl" placeholder="Zoek vissoort..." autocomplete="off">
+  <datalist id="fl">${Object.keys(FISH).map(f => `<option value="${f}">`).join("")}</datalist>
+  <label>Lengte (cm)</label><input id="cm" inputmode="decimal" placeholder="42">
+  <label>Gewicht (kg)</label><input id="kg" inputmode="decimal" placeholder="1,80">
+  <label>Water / plek</label><input id="water" placeholder="Amsterdam-Rijnkanaal">
+  <label>Datum</label><input id="dat" type="date" value="${today()}">
+  <div class="preview" id="pv"><span class="mute">Kies een vissoort en vul lengte en gewicht in.</span></div>
+  <div class="err" id="err"></div>
+  <button id="save">Vangst opslaan</button>`;
+  const upd = () => {
+    const r = calc($("#fish").value.trim(), num($("#cm").value) || 0, num($("#kg").value) || 0);
+    $("#pv").innerHTML = r ? `<div class="t">${r.totaal} XP</div><div class="row"><span class="mute">Basis</span><span>+${r.basis}</span></div><div class="row"><span class="mute">Lengte</span><span>+${r.lengte}</span></div><div class="row"><span class="mute">Gewicht</span><span>+${r.gewicht}</span></div>` : `<span class="mute">Kies een vissoort uit de lijst.</span>`;
+  };
+  ["fish", "cm", "kg"].forEach(i => $("#" + i).oninput = upd);
+  $("#save").onclick = async () => {
+    const soort = $("#fish").value.trim(), cm = num($("#cm").value), kg = num($("#kg").value), water = $("#water").value.trim(), datum = $("#dat").value;
+    const r = calc(soort, cm, kg);
+    if (!r) return $("#err").textContent = "Kies een vissoort uit de lijst.";
+    if (!(cm > 0) || !(kg >= 0) || isNaN(kg)) return $("#err").textContent = "Vul een geldige lengte en gewicht in.";
+    if (!datum) return $("#err").textContent = "Kies een datum.";
+    $("#save").disabled = true;
+    try {
+      await addDoc(collection(db, "catches"), { userId: user.uid, soort, lengte: cm, gewicht: kg, xp: r.totaal, water, datum, aangemaakt: serverTimestamp() });
+      view = "list"; render();
+    } catch (e) { $("#err").textContent = "Opslaan mislukt. Controleer je verbinding en probeer het opnieuw."; $("#save").disabled = false; }
+  };
+}
+
+function listView() {
+  const mine = catches.filter(c => c.userId === user.uid);
+  $("#app").innerHTML = `<h1>Mijn vangsten</h1>` + (mine.length ? mine.map(c => `<div class="card"><div class="row"><b>🐟 ${esc(c.soort)}</b><span class="xp">${c.xp} XP</span></div>
+  <div class="mute">${c.lengte} cm · ${c.gewicht} kg</div><div class="row"><span class="mute">${esc(c.water || "")} ${nlDate(c.datum)}</span><button class="ghost small" data-del="${c.id}">Verwijderen</button></div></div>`).join("") : `<p class="mute">Nog geen vangsten. Tik op Vangst om je eerste op te slaan.</p>`);
+  document.querySelectorAll("[data-del]").forEach(b => b.onclick = () => { if (confirm("Deze vangst verwijderen?")) deleteDoc(doc(db, "catches", b.dataset.del)); });
+}
+
+function rankView() {
+  const st = Object.values(stats()).sort((a, b) => b.xp - a.xp), medal = ["🥇", "🥈", "🥉"];
+  const rec = (key, unit, label) => { const b = catches.reduce((m, c) => !m || c[key] > m[key] ? c : m, null);
+    return `<div class="card"><div class="mute">${label}</div>${b ? `<div class="row"><b>${esc(nameOf(b.userId))} · ${esc(b.soort)}</b><span class="xp">${b[key]} ${unit}</span></div>` : "–"}</div>`; };
+  $("#app").innerHTML = `<h1>Ranglijst</h1>` + st.map((s, i) => { const L = level(s.xp);
+    return `<div class="card row"><div class="row"><span class="rank">${medal[i] || i + 1}</span><div><b>${esc(nameOf(s.id))}</b><div class="mute">Level ${L.nr} · ${L.naam}</div></div></div><span class="xp">${fmt(s.xp)} XP</span></div>`; }).join("")
+    + `<h2>Records</h2>` + rec("lengte", "cm", "Grootste vis") + rec("gewicht", "kg", "Zwaarste vis") + rec("xp", "XP", "Meeste XP uit één vangst");
+}
+
+function meView() {
+  $("#app").innerHTML = `<h1>Profiel</h1><div class="card"><b>${esc(user.displayName || "")}</b><div class="mute">${esc(user.email)}</div></div><button class="ghost" id="out">Uitloggen</button>`;
+  $("#out").onclick = () => signOut(auth);
+}
+</script>
+</body>
+</html>
