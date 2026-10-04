@@ -158,7 +158,8 @@ function home() {
   $("#app").innerHTML = `<h1>Hoi ${esc(user.displayName || "visser")} 👋</h1>
   <div class="card hero"><div class="mute">Level ${L.nr} · ${L.naam}</div><div class="big">${fmt(s.xp)} XP</div>
   <div class="bar"><i style="width:${pct}%"></i></div>
-  <div class="mute">${L.next ? `${fmt(L.next - s.xp)} XP tot level ${L.nr + 1}` : "Hoogste level bereikt"}</div></div>
+  ${L.next ? `<div class="row mute"><span>Level ${L.nr} · ${fmt(L.from)} XP</span><span>Level ${L.nr + 1} · ${fmt(L.next)} XP</span></div>
+  <div style="margin-top:8px">Nog <b class="xp">${fmt(L.next - s.xp)} XP</b> te gaan</div>` : `<div class="mute">Hoogste level bereikt</div>`}</div>
   <div class="grid">
   <div class="card"><b>${s.n}</b><span class="mute">Vangsten</span></div>
   <div class="card"><b>${s.soorten.size}</b><span class="mute">Soorten</span></div>
