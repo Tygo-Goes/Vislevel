@@ -40,7 +40,7 @@ nav a span{display:block;font-size:1.5rem}
 nav a.on{color:var(--acc)}
 .login{padding-top:12vh}
 .rank{font-size:1.6rem;width:36px}
-.hidden{display:none}.tt{display:inline-block;background:var(--card2);border-radius:99px;padding:4px 10px;margin:0 6px 6px 0;font-size:.85rem}.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center}.cal .day{background:var(--card);border-radius:10px;padding:8px 0;min-height:48px;cursor:pointer}.cal .day.has{background:var(--card2)}.cal .day.sel{outline:2px solid var(--acc)}.day small{display:block;font-size:.65rem;color:var(--acc)}.chips{display:flex;gap:8px;overflow-x:auto;margin:12px 0}.chip{flex:none;padding:10px 16px;border-radius:99px;background:var(--card);color:var(--mute);font-weight:800;cursor:pointer;white-space:nowrap}.chip.on{background:var(--acc);color:#2a1d00}
+.hidden{display:none}.ph{width:100%;max-height:320px;object-fit:cover;border-radius:12px;margin-top:10px}.wf{max-height:34vh;max-width:100%;object-fit:cover;border-radius:16px;margin-top:14px}.cf{position:absolute;top:-20px;width:10px;height:16px;animation:fall 3s linear infinite}@keyframes fall{to{transform:translateY(110vh) rotate(720deg)}}@media(prefers-reduced-motion:reduce){.cf{display:none}}.tt{display:inline-block;background:var(--card2);border-radius:99px;padding:4px 10px;margin:0 6px 6px 0;font-size:.85rem}.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center}.cal .day{background:var(--card);border-radius:10px;padding:8px 0;min-height:48px;cursor:pointer}.cal .day.has{background:var(--card2)}.cal .day.sel{outline:2px solid var(--acc)}.day small{display:block;font-size:.65rem;color:var(--acc)}.chips{display:flex;gap:8px;overflow-x:auto;margin:12px 0}.chip{flex:none;padding:10px 16px;border-radius:99px;background:var(--card);color:var(--mute);font-weight:800;cursor:pointer;white-space:nowrap}.chip.on{background:var(--acc);color:#2a1d00}
 .wrap{position:fixed;inset:0;z-index:50;color:#fff;display:flex;flex-direction:column;padding:calc(env(safe-area-inset-top,0px) + 14px) 20px calc(env(safe-area-inset-bottom,0px) + 20px)}
 .wp{display:flex;gap:4px;margin-right:56px}.wp i{flex:1;height:4px;border-radius:9px;background:rgba(255,255,255,.3)}.wp i.on{background:#fff}
 .wx{position:absolute;right:14px;top:calc(env(safe-area-inset-top,0px) + 8px);width:auto;margin:0;padding:6px 12px;background:rgba(0,0,0,.25);color:#fff;font-size:1rem}
@@ -60,7 +60,7 @@ nav a.on{color:var(--acc)}
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, collection, addDoc, deleteDoc, doc, setDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, collection, addDoc, deleteDoc, updateDoc, doc, setDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 /* ====== STAP 5: plak hier jouw Firebase-gegevens ====== */
 const firebaseConfig = {
@@ -96,7 +96,7 @@ const nlDate = d => d.split("-").reverse().join("-");
 const BONUS = 50;
 const curYear = String(new Date().getFullYear());
 let lv = curYear, rv = curYear, goals = {}, lvMode = "lijst", cal = { y: +curYear, m: new Date().getMonth(), d: null };
-const isNew = soort => !catches.some(c => c.userId === user.uid && c.soort === soort);
+const isNew = (soort, ex) => !catches.some(c => c.userId === user.uid && c.soort === soort && c.id !== ex);
 
 let user = null, catches = [], view = "home", unsub = null, usersMap = {};
 
@@ -161,7 +161,7 @@ function render() {
   if (view === "add" && $("#fish")) return; // niet het formulier wissen tijdens typen
   ({ home, add: addView, list: listView, rank: rankView, me: meView })[view]();
 }
-document.querySelectorAll("nav a").forEach(a => a.onclick = () => { view = a.dataset.v; if (view === "add") $("#app").innerHTML = ""; render(); window.scrollTo(0, 0); });
+document.querySelectorAll("nav a").forEach(a => a.onclick = () => { view = a.dataset.v; if (view === "add") { editing = null; $("#app").innerHTML = ""; } render(); window.scrollTo(0, 0); });
 
 const BADGES = [
   ["🎣", "Eerste vangst", "Sla je eerste vangst op", m => m.n >= 1],
@@ -227,34 +227,61 @@ function home() {
   if ($("#seen")) $("#seen").onclick = () => { try { localStorage.setItem(key, Date.now()); } catch (e) {} home(); };
 }
 
+const RECB = 25, RELB = 10;
+let editing = null, foto = null;
+const ownBest = (soort, ex) => { const l = catches.filter(c => c.userId === user.uid && c.soort === soort && c.id !== ex); return { L: Math.max(0, ...l.map(c => c.lengte)), W: Math.max(0, ...l.map(c => c.gewicht)) }; };
+const resize = file => new Promise((ok, no) => { const img = new Image(), u = URL.createObjectURL(file);
+  img.onload = () => { const s = Math.min(1, 800 / Math.max(img.width, img.height)), cv = document.createElement("canvas"); cv.width = img.width * s; cv.height = img.height * s;
+    cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height); URL.revokeObjectURL(u); ok(cv.toDataURL("image/jpeg", 0.6)); };
+  img.onerror = no; img.src = u; });
+
+function levelUp(L) {
+  const el = document.createElement("div"), cols = ["#f2b84b", "#5fd1b0", "#fff", "#ff8f7a", "#6ab0ff"];
+  el.className = "wrap"; el.style.background = "linear-gradient(160deg,#2a1d5e,#5a2f8f)";
+  el.innerHTML = Array.from({ length: 40 }, () => `<span class="cf" style="left:${Math.random() * 100}%;background:${cols[Math.floor(Math.random() * 5)]};animation-delay:${Math.random() * 2}s;animation-duration:${2 + Math.random() * 2}s"></span>`).join("")
+    + `<div class="ws" style="text-align:center"><div class="k">Level up!</div><div class="n" style="font-size:8rem">${L.nr}</div><div class="h">${L.naam}</div><p>Gefeliciteerd, je bent een level omhoog 🎉</p><button id="lu" style="max-width:260px;margin:24px auto 0">Doorgaan</button></div>`;
+  document.body.appendChild(el); el.querySelector("#lu").onclick = () => el.remove();
+}
+
 function addView() {
-  $("#app").innerHTML = `<h1>Vangst toevoegen</h1>
-  <label>Vissoort</label><input id="fish" list="fl" placeholder="Zoek vissoort..." autocomplete="off">
+  const e = editing; foto = e?.foto || null;
+  $("#app").innerHTML = `<h1>${e ? "Vangst bewerken" : "Vangst toevoegen"}</h1>
+  <label>Vissoort</label><input id="fish" list="fl" placeholder="Zoek vissoort..." autocomplete="off" value="${e ? esc(e.soort) : ""}">
   <datalist id="fl">${Object.keys(FISH).map(f => `<option value="${f}">`).join("")}</datalist>
-  <label>Lengte (cm)</label><input id="cm" inputmode="decimal" placeholder="42">
-  <label>Gewicht (kg)</label><input id="kg" inputmode="decimal" placeholder="1,80">
-  <label>Water / plek</label><input id="water" placeholder="Amsterdam-Rijnkanaal">
-  <label>Datum</label><input id="dat" type="date" value="${today()}">
-  <div class="preview" id="pv"><span class="mute">Kies een vissoort en vul lengte en gewicht in.</span></div>
-  <div class="err" id="err"></div>
-  <button id="save">Vangst opslaan</button>`;
-  const upd = () => {
-    const r = calc($("#fish").value.trim(), num($("#cm").value) || 0, num($("#kg").value) || 0);
-    const nb = r && isNew($("#fish").value.trim()) ? BONUS : 0;
-    $("#pv").innerHTML = r ? `<div class="t">${r.totaal + nb} XP</div><div class="row"><span class="mute">Basis</span><span>+${r.basis}</span></div><div class="row"><span class="mute">Lengte</span><span>+${r.lengte}</span></div><div class="row"><span class="mute">Gewicht</span><span>+${r.gewicht}</span></div>${nb ? `<div class="row"><span class="mute">Nieuwe soort 🎉</span><span>+${nb}</span></div>` : ""}` : `<span class="mute">Kies een vissoort uit de lijst.</span>`;
+  <label>Lengte (cm)</label><input id="cm" inputmode="decimal" placeholder="42" value="${e ? e.lengte : ""}">
+  <label>Gewicht (kg)</label><input id="kg" inputmode="decimal" placeholder="1,80" value="${e ? e.gewicht : ""}">
+  <label>Water / plek</label><input id="water" placeholder="Amsterdam-Rijnkanaal" value="${e ? esc(e.water || "") : ""}">
+  <label>Datum</label><input id="dat" type="date" value="${e ? e.datum : today()}">
+  <label>Foto (optioneel)</label><input id="foto" type="file" accept="image/*"><div id="fp">${foto ? `<img class="ph" src="${foto}">` : ""}</div>
+  <label style="display:flex;gap:10px;align-items:center;color:var(--ink)"><input id="rel" type="checkbox" style="width:22px;height:22px;padding:0" ${e?.teruggezet ? "checked" : ""}> Teruggezet (+${RELB} XP)</label>
+  <div class="preview" id="pv"></div><div class="err" id="err"></div>
+  <button id="save">${e ? "Wijzigingen opslaan" : "Vangst opslaan"}</button>${e ? `<button class="ghost" id="cancel">Annuleren</button>` : ""}`;
+  const calcAll = () => {
+    const soort = $("#fish").value.trim(), cm = num($("#cm").value) || 0, kg = num($("#kg").value) || 0, r = calc(soort, cm, kg); if (!r) return null;
+    const nw = isNew(soort, e?.id), ob = ownBest(soort, e?.id), same = e && e.soort === soort;
+    const nb = same ? (e.bonus || 0) : nw ? BONUS : 0, rb = same ? (e.recbonus || 0) : (!e && !nw && (cm > ob.L || kg > ob.W) ? RECB : 0), lb = $("#rel").checked ? RELB : 0;
+    return { r, nb, rb, lb, soort, cm, kg, tot: r.totaal + nb + rb + lb };
   };
-  ["fish", "cm", "kg"].forEach(i => $("#" + i).oninput = upd);
+  const line = (t, v) => v ? `<div class="row"><span class="mute">${t}</span><span>+${v}</span></div>` : "";
+  const upd = () => { const x = calcAll();
+    $("#pv").innerHTML = x ? `<div class="t">${x.tot} XP</div>${line("Basis", x.r.basis)}${line("Lengte", x.r.lengte)}${line("Gewicht", x.r.gewicht)}${line("Nieuwe soort 🎉", x.nb)}${line("Nieuw record 🏅", x.rb)}${line("Teruggezet 🔄", x.lb)}` : `<span class="mute">Kies een vissoort uit de lijst.</span>`; };
+  ["fish", "cm", "kg"].forEach(i => $("#" + i).oninput = upd); $("#rel").onchange = upd; upd();
+  $("#foto").onchange = async ev => { const f = ev.target.files[0]; if (!f) return;
+    try { foto = await resize(f); $("#fp").innerHTML = `<img class="ph" src="${foto}">`; } catch (x) { $("#err").textContent = "Deze foto kon niet worden geladen."; } };
+  if ($("#cancel")) $("#cancel").onclick = () => { editing = null; view = "list"; render(); };
   $("#save").onclick = async () => {
-    const soort = $("#fish").value.trim(), cm = num($("#cm").value), kg = num($("#kg").value), water = $("#water").value.trim(), datum = $("#dat").value;
-    const r = calc(soort, cm, kg);
-    if (!r) return $("#err").textContent = "Kies een vissoort uit de lijst.";
-    if (!(cm > 0) || !(kg >= 0) || isNaN(kg)) return $("#err").textContent = "Vul een geldige lengte en gewicht in.";
+    const x = calcAll(), water = $("#water").value.trim(), datum = $("#dat").value;
+    if (!x) return $("#err").textContent = "Kies een vissoort uit de lijst.";
+    if (!(x.cm > 0) || !(x.kg >= 0) || isNaN(num($("#kg").value))) return $("#err").textContent = "Vul een geldige lengte en gewicht in.";
     if (!datum) return $("#err").textContent = "Kies een datum.";
     $("#save").disabled = true;
+    const data = { userId: user.uid, soort: x.soort, lengte: x.cm, gewicht: x.kg, xp: x.tot, bonus: x.nb, recbonus: x.rb, teruggezet: $("#rel").checked, water, datum, foto: foto || null };
+    const before = stats()[user.uid]?.xp || 0, after = before - (e ? e.xp : 0) + x.tot;
     try {
-      await addDoc(collection(db, "catches"), { userId: user.uid, soort, lengte: cm, gewicht: kg, xp: r.totaal + (isNew(soort) ? BONUS : 0), bonus: isNew(soort) ? BONUS : 0, water, datum, aangemaakt: serverTimestamp() });
-      lv = datum.slice(0, 4); view = "list"; render();
-    } catch (e) { $("#err").textContent = "Opslaan mislukt. Controleer je verbinding en probeer het opnieuw."; $("#save").disabled = false; }
+      if (e) await updateDoc(doc(db, "catches", e.id), data); else await addDoc(collection(db, "catches"), { ...data, aangemaakt: serverTimestamp() });
+      editing = null; lv = datum.slice(0, 4); view = "list"; render();
+      if (level(after).nr > level(before).nr) levelUp(level(after));
+    } catch (er) { $("#err").textContent = "Opslaan mislukt. Controleer je verbinding en of de nieuwe regels in Firebase staan."; $("#save").disabled = false; }
   };
 }
 
@@ -314,10 +341,11 @@ function listView() {
   const kal = lvMode === "kal", mine = catches.filter(c => c.userId === user.uid && inYear(c, lv)), sum = mine.reduce((a, c) => a + c.xp, 0);
   $("#app").innerHTML = `<h1>Mijn vangsten</h1><div class="chips"><div class="chip ${kal ? "" : "on"}" data-md="lijst">Lijst</div><div class="chip ${kal ? "on" : ""}" data-md="kal">Kalender</div></div>`
     + (kal ? calHtml() : `<div class="chips">${chips(lv, "lv")}</div><p class="mute" style="margin-bottom:12px">${mine.length} vangsten · ${fmt(sum)} XP</p>` + (mine.length ? mine.map(c => `<div class="card"><div class="row"><b>🐟 ${esc(c.soort)}</b><span class="xp">${c.xp} XP</span></div>
-  <div class="mute">${c.lengte} cm · ${c.gewicht} kg${c.bonus ? ` · 🎉 +${c.bonus} nieuwe soort` : ""}</div><div class="row"><span class="mute">${esc(c.water || "")} ${nlDate(c.datum)}</span><button class="ghost small" data-del="${c.id}">Verwijderen</button></div></div>`).join("") : `<p class="mute">Geen vangsten in deze periode.</p>`));
+  <div class="mute">${c.lengte} cm · ${c.gewicht} kg${c.bonus ? ` · 🎉 +${c.bonus} nieuwe soort` : ""}${c.recbonus ? ` · 🏅 +${c.recbonus} record` : ""}${c.teruggezet ? " · 🔄 teruggezet" : ""}</div>${c.foto ? `<img class="ph" src="${c.foto}">` : ""}<div class="row"><span class="mute">${esc(c.water || "")} ${nlDate(c.datum)}</span><span><button class="ghost small" data-ed="${c.id}">Bewerken</button> <button class="ghost small" data-del="${c.id}">Verwijderen</button></span></div></div>`).join("") : `<p class="mute">Geen vangsten in deze periode.</p>`));
   document.querySelectorAll("[data-md]").forEach(b => b.onclick = () => { lvMode = b.dataset.md; listView(); });
   document.querySelectorAll("[data-lv]").forEach(b => b.onclick = () => { lv = b.dataset.lv; listView(); });
   document.querySelectorAll("[data-del]").forEach(b => b.onclick = () => { if (confirm("Deze vangst verwijderen?")) deleteDoc(doc(db, "catches", b.dataset.del)); });
+  document.querySelectorAll("[data-ed]").forEach(b => b.onclick = () => { editing = catches.find(c => c.id === b.dataset.ed); $("#app").innerHTML = ""; view = "add"; render(); });
   document.querySelectorAll("[data-d]").forEach(b => b.onclick = () => { cal.d = cal.d === +b.dataset.d ? null : +b.dataset.d; listView(); });
   const mv = n => { cal.m += n; if (cal.m < 0) { cal.m = 11; cal.y--; } if (cal.m > 11) { cal.m = 0; cal.y++; } cal.d = null; listView(); };
   if ($("#cp")) { $("#cp").onclick = () => mv(-1); $("#cn").onclick = () => mv(1); }
@@ -350,7 +378,7 @@ function wrapped(y) {
     sl.push(`<div class="k">Seizoen ${y}</div><div class="h">Jouw jaar op het water, ${esc(user.displayName || "visser")}</div><p>Tik om verder te gaan</p>`,
       `<div class="k">Dit seizoen ving je</div><div class="n">${mine.length}</div><div class="h">vissen</div><p>verdeeld over ${days} ${days === 1 ? "dag" : "dagen"} aan de waterkant</p>`,
       `<div class="k">Je ving</div><div class="n">${sp.length}</div><div class="h">${sp.length === 1 ? "soort" : "verschillende soorten"}</div><div class="list">${sp.slice(0, 5).map(([k, v]) => `<div class="row"><span>${esc(k)}</span><b>${v}×</b></div>`).join("")}</div>`,
-      `<div class="k">Je grootste vis</div><div class="n">${bl.lengte} cm</div><div class="h">${esc(bl.soort)}</div><p>${plek(bl)}</p>`,
+      `<div class="k">Je grootste vis</div><div class="n">${bl.lengte} cm</div><div class="h">${esc(bl.soort)}</div><p>${plek(bl)}</p>${bl.foto ? `<img class="wf" src="${bl.foto}">` : ""}`,
       `<div class="k">Je zwaarste vis</div><div class="n">${bw.gewicht} kg</div><div class="h">${esc(bw.soort)}</div><p>${plek(bw)}</p>`,
       `<div class="k">Jouw favorieten</div><div class="h">${esc(sp[0][0])}</div><p>je meest gevangen soort (${sp[0][1]}×)</p><div class="h" style="font-size:1.7rem;margin-top:22px">${MONTHS[+mo[0][0] - 1]}</div><p>je beste maand (${mo[0][1]} vangsten)</p>${wa.length ? `<div class="h" style="font-size:1.7rem;margin-top:22px">${esc(wa[0][0])}</div><p>je favoriete plek</p>` : ""}`,
       `<div class="k">Je verdiende</div><div class="n">${fmt(xp)}</div><div class="h">XP dit seizoen</div><p>Je level is nu ${tl.nr} · ${tl.naam}</p>`,
