@@ -40,7 +40,7 @@ nav a span{display:block;font-size:1.5rem}
 nav a.on{color:var(--acc)}
 .login{padding-top:12vh}
 .rank{font-size:1.6rem;width:36px}
-.hidden{display:none}
+.hidden{display:none}.badges{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}.bd{background:var(--card);border-radius:14px;padding:10px 2px;text-align:center;font-size:1.6rem;cursor:pointer}.bd small{display:block;font-size:.62rem;color:var(--mute);line-height:1.15;margin-top:4px}.bd.lock{opacity:.35;filter:grayscale(1)}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -68,7 +68,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app), db = getFirestore(app);
 
-const FISH = {Voorntje:[10,1],Rietvoorn:[15,1],Kolblei:[15,1],Bliek:[20,1],Brasem:[30,1],Giebel:[30,1],Baars:[40,1],Zeelt:[50,2],Winde:[50,2],Kroeskarper:[50,2],Paling:[75,2],Karper:[75,2],Schubkarper:[75,2],Snoek:[100,2],Spiegelkarper:[100,2],Roofblei:[100,3],Graskarper:[125,3],Snoekbaars:[125,3],Meerval:[250,3],Rivierkreeft:[25,1]};
+const FISH = {Voorntje:[10,1],Rietvoorn:[15,1],Kolblei:[15,1],Bliek:[20,1],Brasem:[30,1],Giebel:[30,1],Baars:[40,1],Zeelt:[50,2],Winde:[50,2],Kroeskarper:[50,2],Paling:[75,2],Karper:[75,2],Schubkarper:[75,2],Snoek:[100,2],Spiegelkarper:[100,2],Roofblei:[100,3],Graskarper:[125,3],Snoekbaars:[125,3],Meerval:[250,3],Rivierkreeft:[25,1],Pos:[10,1],Bittervoorn:[10,1],"Zwarte grondel":[10,1],Serpeling:[15,1],Kopvoorn:[30,1],Barbeel:[60,2],Forel:[75,2],Regenboogforel:[75,2],Steur:[250,3]};
 const LEVELS = [[0,"Beginner"],[100,"Starter"],[250,"Visser"],[500,"Gevorderd"],[1000,"Ervaren"],[1750,"Specialist"],[2750,"Pro Visser"],[4000,"Expert"],[5500,"Meester Visser"],[7500,"Legende"],[10000,"Visbaas"],[15000,"Visgod"]];
 
 const calc = (soort, cm, kg) => {
@@ -87,6 +87,8 @@ const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;
 const fmt = n => Number(n).toLocaleString("nl-NL");
 const today = () => new Date().toISOString().slice(0, 10);
 const nlDate = d => d.split("-").reverse().join("-");
+const BONUS = 50;
+const isNew = soort => !catches.some(c => c.userId === user.uid && c.soort === soort);
 
 let user = null, catches = [], view = "home", unsub = null, usersMap = {};
 
@@ -152,10 +154,46 @@ function render() {
 }
 document.querySelectorAll("nav a").forEach(a => a.onclick = () => { view = a.dataset.v; if (view === "add") $("#app").innerHTML = ""; render(); window.scrollTo(0, 0); });
 
+const BADGES = [
+  ["🎣", "Eerste vangst", "Sla je eerste vangst op", m => m.n >= 1],
+  ["🔟", "10 vangsten", "Sla 10 vangsten op", m => m.n >= 10],
+  ["🏅", "50 vangsten", "Sla 50 vangsten op", m => m.n >= 50],
+  ["🌈", "5 soorten", "Vang 5 verschillende soorten", m => m.soorten.size >= 5],
+  ["🧭", "10 soorten", "Vang 10 verschillende soorten", m => m.soorten.size >= 10],
+  ["📏", "Meter-vis", "Vang een vis van 100 cm of meer", m => m.maxL && m.maxL.lengte >= 100],
+  ["⚖️", "5 kg+", "Vang een vis van 5 kg of zwaarder", m => m.maxW && m.maxW.gewicht >= 5],
+  ["🐊", "10 kg+", "Vang een vis van 10 kg of zwaarder", m => m.maxW && m.maxW.gewicht >= 10],
+  ["📅", "5 op 1 dag", "Vang 5 vissen op één dag", m => m.dag >= 5],
+  ["🦈", "Roofvisser", "Vang een snoek, baars en snoekbaars", m => ["Snoek", "Baars", "Snoekbaars"].every(x => m.soorten.has(x))]
+];
+
 function home() {
   const s = stats()[user.uid] || { xp: 0, n: 0, soorten: new Set() }, L = level(s.xp);
   const pct = L.next ? Math.min(100, (s.xp - L.from) / (L.next - L.from) * 100) : 100;
-  $("#app").innerHTML = `<h1>Hoi ${esc(user.displayName || "visser")} 👋</h1>
+  const mine = catches.filter(c => c.userId === user.uid), perDag = {};
+  mine.forEach(c => perDag[c.datum] = (perDag[c.datum] || 0) + 1);
+  const m = { ...s, dag: Math.max(0, ...Object.values(perDag)) };
+
+  // Duel
+  const other = Object.values(stats()).filter(x => x.id !== user.uid).sort((a, b) => b.xp - a.xp)[0];
+  let duel = "";
+  if (other) {
+    const a = s.xp, b = other.xp, d = Math.abs(a - b), pa = a + b ? a / (a + b) * 100 : 50, nm = esc(nameOf(other.id));
+    duel = `<h2>Duel</h2><div class="card"><div class="row"><b>${esc(user.displayName || "Jij")}</b><b>${nm}</b></div>
+    <div class="bar" style="display:flex"><i style="width:${pa}%"></i><i style="width:${100 - pa}%;background:var(--ok)"></i></div>
+    <div class="row"><span class="xp">${fmt(a)} XP</span><span style="color:var(--ok);font-weight:800">${fmt(b)} XP</span></div>
+    <div class="mute" style="margin-top:8px">${d === 0 ? "Gelijkspel!" : a > b ? `Jij staat ${fmt(d)} XP voor op ${nm}` : `${nm} staat ${fmt(d)} XP voor`}</div></div>`;
+  }
+
+  // Nieuws van de ander sinds je laatste bezoek
+  const key = "vl_seen_" + user.uid; let seen = 0;
+  try { seen = +localStorage.getItem(key) || 0; if (!seen) localStorage.setItem(key, Date.now()); } catch (e) {}
+  const nieuw = seen ? catches.filter(c => c.userId !== user.uid && (c.aangemaakt?.toMillis?.() || 0) > seen).slice(0, 3) : [];
+  const banner = nieuw.length ? `<div class="card" style="border:2px solid var(--acc)"><b>Nieuw sinds je laatste bezoek</b>
+    ${nieuw.map(c => `<div style="margin-top:6px">🎣 ${esc(nameOf(c.userId))} ving een ${esc(c.soort)} van ${c.lengte} cm</div>`).join("")}
+    <button class="small" id="seen" style="margin-top:10px">Oké</button></div>` : "";
+
+  $("#app").innerHTML = `<h1>Hoi ${esc(user.displayName || "visser")} 👋</h1>${banner}
   <div class="card hero"><div class="mute">Level ${L.nr} · ${L.naam}</div><div class="big">${fmt(s.xp)} XP</div>
   <div class="bar"><i style="width:${pct}%"></i></div>
   ${L.next ? `<div class="row mute"><span>Level ${L.nr} · ${fmt(L.from)} XP</span><span>Level ${L.nr + 1} · ${fmt(L.next)} XP</span></div>
@@ -165,7 +203,13 @@ function home() {
   <div class="card"><b>${s.soorten.size}</b><span class="mute">Soorten</span></div>
   <div class="card"><b>${s.maxL ? s.maxL.lengte + " cm" : "–"}</b><span class="mute">Grootste vis</span></div>
   <div class="card"><b>${s.maxW ? s.maxW.gewicht + " kg" : "–"}</b><span class="mute">Zwaarste vis</span></div></div>
+  ${duel}
+  <h2>Badges ${BADGES.filter(b => b[3](m)).length}/${BADGES.length}</h2>
+  <div class="badges">${BADGES.map((b, i) => `<div class="bd ${b[3](m) ? "" : "lock"}" data-i="${i}">${b[0]}<small>${b[1]}</small></div>`).join("")}</div>
+  <p class="mute" style="margin-top:10px;font-size:.9rem">Tik op een badge om te zien hoe je hem krijgt.</p>
   ${s.n ? "" : `<p class="mute" style="margin-top:16px">Nog geen vangsten. Tik op Vangst en sla je eerste vis op.</p>`}`;
+  document.querySelectorAll(".bd").forEach(el => el.onclick = () => { const b = BADGES[el.dataset.i]; alert(b[1] + (b[3](m) ? " ✅" : " 🔒") + "\n" + b[2]); });
+  if ($("#seen")) $("#seen").onclick = () => { try { localStorage.setItem(key, Date.now()); } catch (e) {} home(); };
 }
 
 function addView() {
@@ -181,7 +225,8 @@ function addView() {
   <button id="save">Vangst opslaan</button>`;
   const upd = () => {
     const r = calc($("#fish").value.trim(), num($("#cm").value) || 0, num($("#kg").value) || 0);
-    $("#pv").innerHTML = r ? `<div class="t">${r.totaal} XP</div><div class="row"><span class="mute">Basis</span><span>+${r.basis}</span></div><div class="row"><span class="mute">Lengte</span><span>+${r.lengte}</span></div><div class="row"><span class="mute">Gewicht</span><span>+${r.gewicht}</span></div>` : `<span class="mute">Kies een vissoort uit de lijst.</span>`;
+    const nb = r && isNew($("#fish").value.trim()) ? BONUS : 0;
+    $("#pv").innerHTML = r ? `<div class="t">${r.totaal + nb} XP</div><div class="row"><span class="mute">Basis</span><span>+${r.basis}</span></div><div class="row"><span class="mute">Lengte</span><span>+${r.lengte}</span></div><div class="row"><span class="mute">Gewicht</span><span>+${r.gewicht}</span></div>${nb ? `<div class="row"><span class="mute">Nieuwe soort 🎉</span><span>+${nb}</span></div>` : ""}` : `<span class="mute">Kies een vissoort uit de lijst.</span>`;
   };
   ["fish", "cm", "kg"].forEach(i => $("#" + i).oninput = upd);
   $("#save").onclick = async () => {
@@ -192,7 +237,7 @@ function addView() {
     if (!datum) return $("#err").textContent = "Kies een datum.";
     $("#save").disabled = true;
     try {
-      await addDoc(collection(db, "catches"), { userId: user.uid, soort, lengte: cm, gewicht: kg, xp: r.totaal, water, datum, aangemaakt: serverTimestamp() });
+      await addDoc(collection(db, "catches"), { userId: user.uid, soort, lengte: cm, gewicht: kg, xp: r.totaal + (isNew(soort) ? BONUS : 0), bonus: isNew(soort) ? BONUS : 0, water, datum, aangemaakt: serverTimestamp() });
       view = "list"; render();
     } catch (e) { $("#err").textContent = "Opslaan mislukt. Controleer je verbinding en probeer het opnieuw."; $("#save").disabled = false; }
   };
@@ -201,7 +246,7 @@ function addView() {
 function listView() {
   const mine = catches.filter(c => c.userId === user.uid);
   $("#app").innerHTML = `<h1>Mijn vangsten</h1>` + (mine.length ? mine.map(c => `<div class="card"><div class="row"><b>🐟 ${esc(c.soort)}</b><span class="xp">${c.xp} XP</span></div>
-  <div class="mute">${c.lengte} cm · ${c.gewicht} kg</div><div class="row"><span class="mute">${esc(c.water || "")} ${nlDate(c.datum)}</span><button class="ghost small" data-del="${c.id}">Verwijderen</button></div></div>`).join("") : `<p class="mute">Nog geen vangsten. Tik op Vangst om je eerste op te slaan.</p>`);
+  <div class="mute">${c.lengte} cm · ${c.gewicht} kg${c.bonus ? ` · 🎉 +${c.bonus} nieuwe soort` : ""}</div><div class="row"><span class="mute">${esc(c.water || "")} ${nlDate(c.datum)}</span><button class="ghost small" data-del="${c.id}">Verwijderen</button></div></div>`).join("") : `<p class="mute">Nog geen vangsten. Tik op Vangst om je eerste op te slaan.</p>`);
   document.querySelectorAll("[data-del]").forEach(b => b.onclick = () => { if (confirm("Deze vangst verwijderen?")) deleteDoc(doc(db, "catches", b.dataset.del)); });
 }
 
