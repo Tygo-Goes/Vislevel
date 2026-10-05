@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0b2a2e">
+<meta name="theme-color" content="#0b2a2e"><link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="icon-192.png"><link rel="apple-touch-icon" href="apple-touch-icon.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
 <title>VisLevel</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&display=swap" rel="stylesheet">
@@ -40,7 +40,7 @@ nav a span{display:block;font-size:1.5rem}
 nav a.on{color:var(--acc)}
 .login{padding-top:12vh}
 .rank{font-size:1.6rem;width:36px}
-.hidden{display:none}.chips{display:flex;gap:8px;overflow-x:auto;margin:12px 0}.chip{flex:none;padding:10px 16px;border-radius:99px;background:var(--card);color:var(--mute);font-weight:800;cursor:pointer;white-space:nowrap}.chip.on{background:var(--acc);color:#2a1d00}
+.hidden{display:none}.tt{display:inline-block;background:var(--card2);border-radius:99px;padding:4px 10px;margin:0 6px 6px 0;font-size:.85rem}.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center}.cal .day{background:var(--card);border-radius:10px;padding:8px 0;min-height:48px;cursor:pointer}.cal .day.has{background:var(--card2)}.cal .day.sel{outline:2px solid var(--acc)}.day small{display:block;font-size:.65rem;color:var(--acc)}.chips{display:flex;gap:8px;overflow-x:auto;margin:12px 0}.chip{flex:none;padding:10px 16px;border-radius:99px;background:var(--card);color:var(--mute);font-weight:800;cursor:pointer;white-space:nowrap}.chip.on{background:var(--acc);color:#2a1d00}
 .wrap{position:fixed;inset:0;z-index:50;color:#fff;display:flex;flex-direction:column;padding:calc(env(safe-area-inset-top,0px) + 14px) 20px calc(env(safe-area-inset-bottom,0px) + 20px)}
 .wp{display:flex;gap:4px;margin-right:56px}.wp i{flex:1;height:4px;border-radius:9px;background:rgba(255,255,255,.3)}.wp i.on{background:#fff}
 .wx{position:absolute;right:14px;top:calc(env(safe-area-inset-top,0px) + 8px);width:auto;margin:0;padding:6px 12px;background:rgba(0,0,0,.25);color:#fff;font-size:1rem}
@@ -95,7 +95,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 const nlDate = d => d.split("-").reverse().join("-");
 const BONUS = 50;
 const curYear = String(new Date().getFullYear());
-let lv = curYear, rv = curYear;
+let lv = curYear, rv = curYear, goals = {}, lvMode = "lijst", cal = { y: +curYear, m: new Date().getMonth(), d: null };
 const isNew = soort => !catches.some(c => c.userId === user.uid && c.soort === soort);
 
 let user = null, catches = [], view = "home", unsub = null, usersMap = {};
@@ -112,7 +112,8 @@ onAuthStateChanged(auth, u => {
     catches = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.datum.localeCompare(a.datum) || 0);
     render();
   }, e => console.error(e));
-  unsub = () => { u1(); u2(); };
+  const u3 = onSnapshot(collection(db, "goals"), s => { goals = {}; s.forEach(d => goals[d.id] = d.data().doel); render(); }, () => {});
+  unsub = () => { u1(); u2(); u3(); };
 });
 
 function loginView(mode = "in") {
@@ -202,7 +203,7 @@ function home() {
     ${nieuw.map(c => `<div style="margin-top:6px">🎣 ${esc(nameOf(c.userId))} ving een ${esc(c.soort)} van ${c.lengte} cm</div>`).join("")}
     <button class="small" id="seen" style="margin-top:10px">Oké</button></div>` : "";
 
-  $("#app").innerHTML = `<h1>Hoi ${esc(user.displayName || "visser")} 👋</h1>${banner}
+  $("#app").innerHTML = `<h1>Hoi ${esc(user.displayName || "visser")} 👋</h1><div style="margin:8px 0 12px">${titlesFor(user.uid).map(t => `<span class="tt">${t}</span>`).join("")}</div>${banner}
   <div class="card hero"><div class="mute">Level ${L.nr} · ${L.naam}</div><div class="big">${fmt(s.xp)} XP</div>
   <div class="bar"><i style="width:${pct}%"></i></div>
   ${L.next ? `<div class="row mute"><span>Level ${L.nr} · ${fmt(L.from)} XP</span><span>Level ${L.nr + 1} · ${fmt(L.next)} XP</span></div>
@@ -213,6 +214,7 @@ function home() {
   <div class="card"><b>${s.maxL ? s.maxL.lengte + " cm" : "–"}</b><span class="mute">Grootste vis</span></div>
   <div class="card"><b>${s.maxW ? s.maxW.gewicht + " kg" : "–"}</b><span class="mute">Zwaarste vis</span></div></div>
   <div class="card row" style="margin-top:12px"><span class="mute">Seizoen ${curYear}</span><b>${sm.length} vangsten · <span class="xp">${fmt(sm.reduce((a, c) => a + c.xp, 0))} XP</span></b></div>
+  ${cmpLine()}${goalCard()}
   <button id="wr" class="${new Date().getMonth() === 11 ? "" : "ghost"}" style="margin-top:0">✨ Wrapped ${curYear}</button>
   ${duel}
   <h2>Badges ${BADGES.filter(b => b[3](m)).length}/${BADGES.length}</h2>
@@ -221,6 +223,7 @@ function home() {
   ${s.n ? "" : `<p class="mute" style="margin-top:16px">Nog geen vangsten. Tik op Vangst en sla je eerste vis op.</p>`}`;
   document.querySelectorAll(".bd").forEach(el => el.onclick = () => { const b = BADGES[el.dataset.i]; alert(b[1] + (b[3](m) ? " ✅" : " 🔒") + "\n" + b[2]); });
   $("#wr").onclick = () => wrapped(curYear);
+  $("#goal").onclick = setGoal;
   if ($("#seen")) $("#seen").onclick = () => { try { localStorage.setItem(key, Date.now()); } catch (e) {} home(); };
 }
 
@@ -255,16 +258,69 @@ function addView() {
   };
 }
 
+const bestOf = (l, k) => l.reduce((m, c) => !m || c[k] > m[k] ? c : m, null);
+function titlesFor(id) {
+  const mine = catches.filter(c => c.userId === id); if (!mine.length) return [];
+  const t = [], holds = (re, k) => { const b = bestOf(catches.filter(c => re.test(c.soort)), k); return b && b.userId === id; };
+  if (holds(/^Snoek$/, "lengte")) t.push("👑 Snoekenkoning");
+  if (holds(/karper/i, "gewicht")) t.push("🏆 Karperkoning");
+  if (bestOf(catches, "gewicht").userId === id) t.push("💪 Zware jongen");
+  const sp = {}; catches.forEach(c => { const b = sp[c.soort]; if (!b || c.lengte > b.lengte) sp[c.soort] = c; });
+  if (Object.values(sp).filter(c => c.userId === id).length >= 3) t.push("🎯 Recordjager");
+  if (new Set(mine.map(c => c.soort)).size >= 15) t.push("🧭 Allrounder");
+  if (bestOf(mine, "lengte").lengte >= 100) t.push("📏 Meetlat");
+  if (!t.length) t.push(mine.length >= 10 ? "🎣 Vaste visser" : "🌱 Nieuwkomer");
+  return t;
+}
+function cmp(y, id = user.uid) {
+  const py = String(+y - 1), cut = y === curYear ? new Date().toISOString().slice(5, 10) : "12-31", xp = a => a.reduce((s, c) => s + c.xp, 0);
+  const cur = catches.filter(c => c.userId === id && c.datum.startsWith(y)), prev = catches.filter(c => c.userId === id && c.datum.startsWith(py) && c.datum.slice(5) <= cut);
+  return prev.length ? { n: cur.length, pn: prev.length, dn: cur.length - prev.length, dx: xp(cur) - xp(prev), py } : null;
+}
+const cmpLine = () => { const c = cmp(curYear); return c ? `<div class="mute" style="margin:-4px 4px 12px">📈 ${c.dn >= 0 ? "+" : ""}${c.dn} vangsten t.o.v. dezelfde periode in ${c.py} (${c.pn})</div>` : ""; };
+function goalCard() {
+  const g = goals[curYear], n = catches.filter(c => c.datum.startsWith(curYear)).length;
+  if (!g) return `<div class="card row"><span class="mute">Seizoensdoel</span><button class="small" id="goal">Instellen</button></div>`;
+  return `<div class="card"><div class="row"><b>Seizoensdoel samen</b><button class="small ghost" id="goal">Wijzig</button></div><div class="bar"><i style="width:${Math.min(100, n / g * 100)}%"></i></div><div class="row"><span>${n} / ${g} vangsten</span><span class="xp">${n >= g ? "🎉 Gehaald!" : `nog ${g - n}`}</span></div></div>`;
+}
+async function setGoal() {
+  const v = parseInt(prompt("Hoeveel vangsten willen jullie dit seizoen samen halen?", goals[curYear] || 100));
+  if (v > 0) try { await setDoc(doc(db, "goals", curYear), { doel: v }); } catch (e) { alert("Opslaan mislukt. Staan de nieuwe regels in Firebase?"); }
+}
+function hallOfFame() {
+  const rows = yearsList().map(y => { const yc = catches.filter(c => c.datum.startsWith(y)); if (!yc.length) return "";
+    const w = Object.values(stats(yc)).sort((a, b) => b.n - a.n || b.xp - a.xp)[0], bl = bestOf(yc, "lengte"), bw = bestOf(yc, "gewicht");
+    return `<div class="card"><div class="row"><b>Seizoen ${y}</b><span class="xp">${y === curYear ? "tussenstand" : "winnaar"}</span></div>
+    <div style="font-size:1.3rem;font-weight:800;margin:4px 0">🏆 ${esc(nameOf(w.id))} <span class="mute" style="font-size:.95rem">${w.n} vangsten</span></div>
+    <div class="mute">Grootste: ${esc(nameOf(bl.userId))} · ${esc(bl.soort)} ${bl.lengte} cm<br>Zwaarste: ${esc(nameOf(bw.userId))} · ${esc(bw.soort)} ${bw.gewicht} kg</div></div>`; }).join("");
+  return `<h2>Eregalerij</h2>${rows || `<p class="mute">Nog geen seizoenen.</p>`}`;
+}
+function calHtml() {
+  const { y, m } = cal, dim = new Date(y, m + 1, 0).getDate(), off = (new Date(y, m, 1).getDay() + 6) % 7, pre = `${y}-${String(m + 1).padStart(2, "0")}`;
+  const mine = catches.filter(c => c.userId === user.uid && c.datum.startsWith(pre)), by = {};
+  mine.forEach(c => (by[+c.datum.slice(8)] ||= []).push(c));
+  let cells = "<div></div>".repeat(off);
+  for (let d = 1; d <= dim; d++) { const n = (by[d] || []).length; cells += `<div class="day ${n ? "has" : ""} ${cal.d === d ? "sel" : ""}" data-d="${d}">${d}${n ? `<small>${n}🐟</small>` : ""}</div>`; }
+  return `<div class="row" style="margin:12px 0"><button class="small ghost" id="cp">◀</button><b>${MONTHS[m]} ${y}</b><button class="small ghost" id="cn">▶</button></div>
+  <div class="cal">${["ma", "di", "wo", "do", "vr", "za", "zo"].map(x => `<div class="mute">${x}</div>`).join("")}${cells}</div>
+  <p class="mute" style="margin:10px 0">${mine.length} vangsten · ${new Set(mine.map(c => c.datum)).size} dagen gevist</p>
+  ${(by[cal.d] || []).map(c => `<div class="card row"><b>🐟 ${esc(c.soort)}</b><span class="mute">${c.lengte} cm · ${c.gewicht} kg</span></div>`).join("")}`;
+}
 const yearsList = () => [...new Set([curYear, ...catches.map(c => c.datum.slice(0, 4))])].sort().reverse();
 const chips = (cur, a) => yearsList().map(y => `<div class="chip ${cur === y ? "on" : ""}" data-${a}="${y}">Seizoen ${y}</div>`).join("") + `<div class="chip ${cur === "all" ? "on" : ""}" data-${a}="all">Alle tijd</div>`;
 const inYear = (c, y) => y === "all" || c.datum.startsWith(y);
 
 function listView() {
-  const mine = catches.filter(c => c.userId === user.uid && inYear(c, lv)), sum = mine.reduce((a, c) => a + c.xp, 0);
-  $("#app").innerHTML = `<h1>Mijn vangsten</h1><div class="chips">${chips(lv, "lv")}</div><p class="mute" style="margin-bottom:12px">${mine.length} vangsten · ${fmt(sum)} XP</p>` + (mine.length ? mine.map(c => `<div class="card"><div class="row"><b>🐟 ${esc(c.soort)}</b><span class="xp">${c.xp} XP</span></div>
-  <div class="mute">${c.lengte} cm · ${c.gewicht} kg${c.bonus ? ` · 🎉 +${c.bonus} nieuwe soort` : ""}</div><div class="row"><span class="mute">${esc(c.water || "")} ${nlDate(c.datum)}</span><button class="ghost small" data-del="${c.id}">Verwijderen</button></div></div>`).join("") : `<p class="mute">Geen vangsten in deze periode.</p>`);
+  const kal = lvMode === "kal", mine = catches.filter(c => c.userId === user.uid && inYear(c, lv)), sum = mine.reduce((a, c) => a + c.xp, 0);
+  $("#app").innerHTML = `<h1>Mijn vangsten</h1><div class="chips"><div class="chip ${kal ? "" : "on"}" data-md="lijst">Lijst</div><div class="chip ${kal ? "on" : ""}" data-md="kal">Kalender</div></div>`
+    + (kal ? calHtml() : `<div class="chips">${chips(lv, "lv")}</div><p class="mute" style="margin-bottom:12px">${mine.length} vangsten · ${fmt(sum)} XP</p>` + (mine.length ? mine.map(c => `<div class="card"><div class="row"><b>🐟 ${esc(c.soort)}</b><span class="xp">${c.xp} XP</span></div>
+  <div class="mute">${c.lengte} cm · ${c.gewicht} kg${c.bonus ? ` · 🎉 +${c.bonus} nieuwe soort` : ""}</div><div class="row"><span class="mute">${esc(c.water || "")} ${nlDate(c.datum)}</span><button class="ghost small" data-del="${c.id}">Verwijderen</button></div></div>`).join("") : `<p class="mute">Geen vangsten in deze periode.</p>`));
+  document.querySelectorAll("[data-md]").forEach(b => b.onclick = () => { lvMode = b.dataset.md; listView(); });
   document.querySelectorAll("[data-lv]").forEach(b => b.onclick = () => { lv = b.dataset.lv; listView(); });
   document.querySelectorAll("[data-del]").forEach(b => b.onclick = () => { if (confirm("Deze vangst verwijderen?")) deleteDoc(doc(db, "catches", b.dataset.del)); });
+  document.querySelectorAll("[data-d]").forEach(b => b.onclick = () => { cal.d = cal.d === +b.dataset.d ? null : +b.dataset.d; listView(); });
+  const mv = n => { cal.m += n; if (cal.m < 0) { cal.m = 11; cal.y--; } if (cal.m > 11) { cal.m = 0; cal.y++; } cal.d = null; listView(); };
+  if ($("#cp")) { $("#cp").onclick = () => mv(-1); $("#cn").onclick = () => mv(1); }
 }
 
 function rankView() {
@@ -274,8 +330,8 @@ function rankView() {
     return `<div class="card"><div class="mute">${label}</div>${b ? `<div class="row"><b>${esc(nameOf(b.userId))} · ${esc(b.soort)}</b><span class="xp">${b[key]} ${unit}</span></div>` : "–"}</div>`; };
   $("#app").innerHTML = `<h1>Ranglijst</h1><div class="chips">${chips(rv, "rv")}</div><p class="mute" style="margin-bottom:12px">${all ? "Alle tijd: gesorteerd op XP" : `Seizoen ${rv}: wie de meeste vangsten heeft, wint`}</p>`
     + st.map((s, i) => { const L = level(stats()[s.id]?.xp || 0);
-      return `<div class="card row"><div class="row"><span class="rank">${medal[i] || i + 1}</span><div><b>${esc(nameOf(s.id))}</b><div class="mute">${all ? `Level ${L.nr} · ${L.naam}` : `${fmt(s.xp)} XP · ${s.soorten.size} soorten`}</div></div></div><span class="xp">${all ? fmt(s.xp) + " XP" : s.n + " vangsten"}</span></div>`; }).join("")
-    + `<h2>Records</h2>` + rec("lengte", "cm", "Grootste vis") + rec("gewicht", "kg", "Zwaarste vis") + rec("xp", "XP", "Meeste XP uit één vangst");
+      return `<div class="card row"><div class="row"><span class="rank">${medal[i] || i + 1}</span><div><b>${esc(nameOf(s.id))}</b> <span class="xp" style="font-size:.85rem">${esc(titlesFor(s.id)[0] || "")}</span><div class="mute">${all ? `Level ${L.nr} · ${L.naam}` : `${fmt(s.xp)} XP · ${s.soorten.size} soorten`}</div></div></div><span class="xp">${all ? fmt(s.xp) + " XP" : s.n + " vangsten"}</span></div>`; }).join("")
+    + `<h2>Records</h2>` + rec("lengte", "cm", "Grootste vis") + rec("gewicht", "kg", "Zwaarste vis") + rec("xp", "XP", "Meeste XP uit één vangst") + hallOfFame();
   document.querySelectorAll("[data-rv]").forEach(b => b.onclick = () => { rv = b.dataset.rv; rankView(); });
 }
 
@@ -290,7 +346,7 @@ function wrapped(y) {
     const days = new Set(mine.map(c => c.datum)).size, sp = topBy(mine, c => c.soort), mo = topBy(mine, c => c.datum.slice(5, 7)), wa = topBy(mine, c => (c.water || "").trim());
     const xp = mine.reduce((a, c) => a + c.xp, 0), bl = mine.reduce((a, c) => c.lengte > a.lengte ? c : a), bw = mine.reduce((a, c) => c.gewicht > a.gewicht ? c : a);
     const st = Object.values(stats(yc)).sort((a, b) => b.n - a.n || b.xp - a.xp), live = y === curYear, tl = level(stats()[user.uid]?.xp || 0);
-    const plek = c => `${nlDate(c.datum)}${c.water ? " · " + esc(c.water) : ""}`;
+    const cp = cmp(y), plek = c => `${nlDate(c.datum)}${c.water ? " · " + esc(c.water) : ""}`;
     sl.push(`<div class="k">Seizoen ${y}</div><div class="h">Jouw jaar op het water, ${esc(user.displayName || "visser")}</div><p>Tik om verder te gaan</p>`,
       `<div class="k">Dit seizoen ving je</div><div class="n">${mine.length}</div><div class="h">vissen</div><p>verdeeld over ${days} ${days === 1 ? "dag" : "dagen"} aan de waterkant</p>`,
       `<div class="k">Je ving</div><div class="n">${sp.length}</div><div class="h">${sp.length === 1 ? "soort" : "verschillende soorten"}</div><div class="list">${sp.slice(0, 5).map(([k, v]) => `<div class="row"><span>${esc(k)}</span><b>${v}×</b></div>`).join("")}</div>`,
@@ -298,6 +354,7 @@ function wrapped(y) {
       `<div class="k">Je zwaarste vis</div><div class="n">${bw.gewicht} kg</div><div class="h">${esc(bw.soort)}</div><p>${plek(bw)}</p>`,
       `<div class="k">Jouw favorieten</div><div class="h">${esc(sp[0][0])}</div><p>je meest gevangen soort (${sp[0][1]}×)</p><div class="h" style="font-size:1.7rem;margin-top:22px">${MONTHS[+mo[0][0] - 1]}</div><p>je beste maand (${mo[0][1]} vangsten)</p>${wa.length ? `<div class="h" style="font-size:1.7rem;margin-top:22px">${esc(wa[0][0])}</div><p>je favoriete plek</p>` : ""}`,
       `<div class="k">Je verdiende</div><div class="n">${fmt(xp)}</div><div class="h">XP dit seizoen</div><p>Je level is nu ${tl.nr} · ${tl.naam}</p>`,
+      ...(cp ? [`<div class="k">Vergeleken met ${cp.py}</div><div class="n">${cp.dn >= 0 ? "+" : ""}${cp.dn}</div><div class="h">vangsten</div><p>${cp.n} nu, ${cp.pn} toen · ${cp.dx >= 0 ? "+" : ""}${fmt(cp.dx)} XP</p>`] : []),
       `<div class="k">${live ? "Tussenstand" : "Seizoenswinnaar"}</div><div class="h">${esc(nameOf(st[0].id))} 🏆</div><p>${st[0].id === user.uid ? (live ? "Jij staat bovenaan!" : "Dat ben jij! 🎉") : "met de meeste vangsten"}</p><div class="list">${st.map((x, i) => `<div class="row"><span>${i + 1}. ${esc(nameOf(x.id))}</span><b>${x.n} vangsten</b></div>`).join("")}</div>`,
       `<div class="h">${live ? "Het seizoen loopt nog 🎣" : "Tot volgend seizoen 🎣"}</div><p>Een nieuw seizoen begint op 1 januari. Je level en je totalen blijven bewaard.</p>`);
   }
@@ -310,7 +367,12 @@ function wrapped(y) {
 }
 
 function meView() {
-  $("#app").innerHTML = `<h1>Profiel</h1><div class="card"><b>${esc(user.displayName || "")}</b><div class="mute">${esc(user.email)}</div></div>
+  const bySp = {}; catches.forEach(c => { const o = bySp[c.soort] ||= { l: null, w: null, ml: null, mw: null }; if (!o.l || c.lengte > o.l.lengte) o.l = c; if (!o.w || c.gewicht > o.w.gewicht) o.w = c;
+    if (c.userId === user.uid) { if (!o.ml || c.lengte > o.ml.lengte) o.ml = c; if (!o.mw || c.gewicht > o.mw.gewicht) o.mw = c; } });
+  const rec = Object.entries(bySp).filter(([, o]) => o.ml).sort((a, b) => a[0].localeCompare(b[0]));
+  $("#app").innerHTML = `<h1>Profiel</h1><div class="card"><b>${esc(user.displayName || "")}</b><div class="mute">${esc(user.email)}</div><div style="margin-top:10px">${titlesFor(user.uid).map(t => `<span class="tt">${t}</span>`).join("")}</div></div>
+  <h2>Mijn records per soort</h2>${rec.length ? rec.map(([k, o]) => `<div class="card"><div class="row"><b>${esc(k)}</b><span class="xp">${o.ml.lengte} cm · ${o.mw.gewicht} kg</span></div>
+  <div class="mute">${o.l.userId === user.uid ? "👑 Jij hebt het lengterecord" : `Lengterecord: ${esc(nameOf(o.l.userId))} ${o.l.lengte} cm`}<br>${o.w.userId === user.uid ? "👑 Jij hebt het gewichtsrecord" : `Gewichtsrecord: ${esc(nameOf(o.w.userId))} ${o.w.gewicht} kg`}</div></div>`).join("") : `<p class="mute">Nog geen vangsten.</p>`}
   <h2>Wrapped</h2>${yearsList().map(y => `<button class="ghost" data-wr="${y}" style="margin-top:8px">✨ Wrapped ${y}</button>`).join("")}
   <button class="ghost" id="out" style="margin-top:28px">Uitloggen</button>`;
   document.querySelectorAll("[data-wr]").forEach(b => b.onclick = () => wrapped(b.dataset.wr));
