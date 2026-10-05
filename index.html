@@ -40,7 +40,13 @@ nav a span{display:block;font-size:1.5rem}
 nav a.on{color:var(--acc)}
 .login{padding-top:12vh}
 .rank{font-size:1.6rem;width:36px}
-.hidden{display:none}.badges{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}.bd{background:var(--card);border-radius:14px;padding:10px 2px;text-align:center;font-size:1.6rem;cursor:pointer}.bd small{display:block;font-size:.62rem;color:var(--mute);line-height:1.15;margin-top:4px}.bd.lock{opacity:.35;filter:grayscale(1)}
+.hidden{display:none}.chips{display:flex;gap:8px;overflow-x:auto;margin:12px 0}.chip{flex:none;padding:10px 16px;border-radius:99px;background:var(--card);color:var(--mute);font-weight:800;cursor:pointer;white-space:nowrap}.chip.on{background:var(--acc);color:#2a1d00}
+.wrap{position:fixed;inset:0;z-index:50;color:#fff;display:flex;flex-direction:column;padding:calc(env(safe-area-inset-top,0px) + 14px) 20px calc(env(safe-area-inset-bottom,0px) + 20px)}
+.wp{display:flex;gap:4px;margin-right:56px}.wp i{flex:1;height:4px;border-radius:9px;background:rgba(255,255,255,.3)}.wp i.on{background:#fff}
+.wx{position:absolute;right:14px;top:calc(env(safe-area-inset-top,0px) + 8px);width:auto;margin:0;padding:6px 12px;background:rgba(0,0,0,.25);color:#fff;font-size:1rem}
+.ws{flex:1;display:flex;flex-direction:column;justify-content:center;max-width:520px;margin:0 auto;width:100%;animation:up .5s}
+.ws .k{opacity:.8;font-size:1.1rem}.ws .h{font-size:2.2rem;font-weight:800;line-height:1.1;margin:8px 0}.ws .n{font-size:6rem;font-weight:800;line-height:1;color:var(--acc)}.ws p{opacity:.85;font-size:1.1rem}.ws .list{margin-top:18px;background:rgba(0,0,0,.2);border-radius:16px;padding:10px 16px}.ws .list .row{padding:6px 0}
+@keyframes up{from{opacity:0;transform:translateY(16px)}}.badges{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}.bd{background:var(--card);border-radius:14px;padding:10px 2px;text-align:center;font-size:1.6rem;cursor:pointer}.bd small{display:block;font-size:.62rem;color:var(--mute);line-height:1.15;margin-top:4px}.bd.lock{opacity:.35;filter:grayscale(1)}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -88,6 +94,8 @@ const fmt = n => Number(n).toLocaleString("nl-NL");
 const today = () => new Date().toISOString().slice(0, 10);
 const nlDate = d => d.split("-").reverse().join("-");
 const BONUS = 50;
+const curYear = String(new Date().getFullYear());
+let lv = curYear, rv = curYear;
 const isNew = soort => !catches.some(c => c.userId === user.uid && c.soort === soort);
 
 let user = null, catches = [], view = "home", unsub = null, usersMap = {};
@@ -134,9 +142,9 @@ function loginView(mode = "in") {
 }
 
 /* ---------- Data ---------- */
-function stats() {
+function stats(list = catches) {
   const by = {};
-  catches.forEach(c => { (by[c.userId] ||= { id: c.userId, xp: 0, n: 0, soorten: new Set(), maxL: null, maxW: null }); const s = by[c.userId];
+  list.forEach(c => { (by[c.userId] ||= { id: c.userId, xp: 0, n: 0, soorten: new Set(), maxL: null, maxW: null }); const s = by[c.userId];
     s.xp += c.xp; s.n++; s.soorten.add(c.soort);
     if (!s.maxL || c.lengte > s.maxL.lengte) s.maxL = c;
     if (!s.maxW || c.gewicht > s.maxW.gewicht) s.maxW = c; });
@@ -172,6 +180,7 @@ function home() {
   const pct = L.next ? Math.min(100, (s.xp - L.from) / (L.next - L.from) * 100) : 100;
   const mine = catches.filter(c => c.userId === user.uid), perDag = {};
   mine.forEach(c => perDag[c.datum] = (perDag[c.datum] || 0) + 1);
+  const sm = mine.filter(c => c.datum.startsWith(curYear));
   const m = { ...s, dag: Math.max(0, ...Object.values(perDag)) };
 
   // Duel
@@ -203,12 +212,15 @@ function home() {
   <div class="card"><b>${s.soorten.size}</b><span class="mute">Soorten</span></div>
   <div class="card"><b>${s.maxL ? s.maxL.lengte + " cm" : "–"}</b><span class="mute">Grootste vis</span></div>
   <div class="card"><b>${s.maxW ? s.maxW.gewicht + " kg" : "–"}</b><span class="mute">Zwaarste vis</span></div></div>
+  <div class="card row" style="margin-top:12px"><span class="mute">Seizoen ${curYear}</span><b>${sm.length} vangsten · <span class="xp">${fmt(sm.reduce((a, c) => a + c.xp, 0))} XP</span></b></div>
+  <button id="wr" class="${new Date().getMonth() === 11 ? "" : "ghost"}" style="margin-top:0">✨ Wrapped ${curYear}</button>
   ${duel}
   <h2>Badges ${BADGES.filter(b => b[3](m)).length}/${BADGES.length}</h2>
   <div class="badges">${BADGES.map((b, i) => `<div class="bd ${b[3](m) ? "" : "lock"}" data-i="${i}">${b[0]}<small>${b[1]}</small></div>`).join("")}</div>
   <p class="mute" style="margin-top:10px;font-size:.9rem">Tik op een badge om te zien hoe je hem krijgt.</p>
   ${s.n ? "" : `<p class="mute" style="margin-top:16px">Nog geen vangsten. Tik op Vangst en sla je eerste vis op.</p>`}`;
   document.querySelectorAll(".bd").forEach(el => el.onclick = () => { const b = BADGES[el.dataset.i]; alert(b[1] + (b[3](m) ? " ✅" : " 🔒") + "\n" + b[2]); });
+  $("#wr").onclick = () => wrapped(curYear);
   if ($("#seen")) $("#seen").onclick = () => { try { localStorage.setItem(key, Date.now()); } catch (e) {} home(); };
 }
 
@@ -238,29 +250,70 @@ function addView() {
     $("#save").disabled = true;
     try {
       await addDoc(collection(db, "catches"), { userId: user.uid, soort, lengte: cm, gewicht: kg, xp: r.totaal + (isNew(soort) ? BONUS : 0), bonus: isNew(soort) ? BONUS : 0, water, datum, aangemaakt: serverTimestamp() });
-      view = "list"; render();
+      lv = datum.slice(0, 4); view = "list"; render();
     } catch (e) { $("#err").textContent = "Opslaan mislukt. Controleer je verbinding en probeer het opnieuw."; $("#save").disabled = false; }
   };
 }
 
+const yearsList = () => [...new Set([curYear, ...catches.map(c => c.datum.slice(0, 4))])].sort().reverse();
+const chips = (cur, a) => yearsList().map(y => `<div class="chip ${cur === y ? "on" : ""}" data-${a}="${y}">Seizoen ${y}</div>`).join("") + `<div class="chip ${cur === "all" ? "on" : ""}" data-${a}="all">Alle tijd</div>`;
+const inYear = (c, y) => y === "all" || c.datum.startsWith(y);
+
 function listView() {
-  const mine = catches.filter(c => c.userId === user.uid);
-  $("#app").innerHTML = `<h1>Mijn vangsten</h1>` + (mine.length ? mine.map(c => `<div class="card"><div class="row"><b>🐟 ${esc(c.soort)}</b><span class="xp">${c.xp} XP</span></div>
-  <div class="mute">${c.lengte} cm · ${c.gewicht} kg${c.bonus ? ` · 🎉 +${c.bonus} nieuwe soort` : ""}</div><div class="row"><span class="mute">${esc(c.water || "")} ${nlDate(c.datum)}</span><button class="ghost small" data-del="${c.id}">Verwijderen</button></div></div>`).join("") : `<p class="mute">Nog geen vangsten. Tik op Vangst om je eerste op te slaan.</p>`);
+  const mine = catches.filter(c => c.userId === user.uid && inYear(c, lv)), sum = mine.reduce((a, c) => a + c.xp, 0);
+  $("#app").innerHTML = `<h1>Mijn vangsten</h1><div class="chips">${chips(lv, "lv")}</div><p class="mute" style="margin-bottom:12px">${mine.length} vangsten · ${fmt(sum)} XP</p>` + (mine.length ? mine.map(c => `<div class="card"><div class="row"><b>🐟 ${esc(c.soort)}</b><span class="xp">${c.xp} XP</span></div>
+  <div class="mute">${c.lengte} cm · ${c.gewicht} kg${c.bonus ? ` · 🎉 +${c.bonus} nieuwe soort` : ""}</div><div class="row"><span class="mute">${esc(c.water || "")} ${nlDate(c.datum)}</span><button class="ghost small" data-del="${c.id}">Verwijderen</button></div></div>`).join("") : `<p class="mute">Geen vangsten in deze periode.</p>`);
+  document.querySelectorAll("[data-lv]").forEach(b => b.onclick = () => { lv = b.dataset.lv; listView(); });
   document.querySelectorAll("[data-del]").forEach(b => b.onclick = () => { if (confirm("Deze vangst verwijderen?")) deleteDoc(doc(db, "catches", b.dataset.del)); });
 }
 
 function rankView() {
-  const st = Object.values(stats()).sort((a, b) => b.xp - a.xp), medal = ["🥇", "🥈", "🥉"];
-  const rec = (key, unit, label) => { const b = catches.reduce((m, c) => !m || c[key] > m[key] ? c : m, null);
+  const all = rv === "all", list = catches.filter(c => inYear(c, rv));
+  const st = Object.values(stats(list)).sort(all ? (a, b) => b.xp - a.xp : (a, b) => b.n - a.n || b.xp - a.xp), medal = ["🥇", "🥈", "🥉"];
+  const rec = (key, unit, label) => { const b = list.reduce((m, c) => !m || c[key] > m[key] ? c : m, null);
     return `<div class="card"><div class="mute">${label}</div>${b ? `<div class="row"><b>${esc(nameOf(b.userId))} · ${esc(b.soort)}</b><span class="xp">${b[key]} ${unit}</span></div>` : "–"}</div>`; };
-  $("#app").innerHTML = `<h1>Ranglijst</h1>` + st.map((s, i) => { const L = level(s.xp);
-    return `<div class="card row"><div class="row"><span class="rank">${medal[i] || i + 1}</span><div><b>${esc(nameOf(s.id))}</b><div class="mute">Level ${L.nr} · ${L.naam}</div></div></div><span class="xp">${fmt(s.xp)} XP</span></div>`; }).join("")
+  $("#app").innerHTML = `<h1>Ranglijst</h1><div class="chips">${chips(rv, "rv")}</div><p class="mute" style="margin-bottom:12px">${all ? "Alle tijd: gesorteerd op XP" : `Seizoen ${rv}: wie de meeste vangsten heeft, wint`}</p>`
+    + st.map((s, i) => { const L = level(stats()[s.id]?.xp || 0);
+      return `<div class="card row"><div class="row"><span class="rank">${medal[i] || i + 1}</span><div><b>${esc(nameOf(s.id))}</b><div class="mute">${all ? `Level ${L.nr} · ${L.naam}` : `${fmt(s.xp)} XP · ${s.soorten.size} soorten`}</div></div></div><span class="xp">${all ? fmt(s.xp) + " XP" : s.n + " vangsten"}</span></div>`; }).join("")
     + `<h2>Records</h2>` + rec("lengte", "cm", "Grootste vis") + rec("gewicht", "kg", "Zwaarste vis") + rec("xp", "XP", "Meeste XP uit één vangst");
+  document.querySelectorAll("[data-rv]").forEach(b => b.onclick = () => { rv = b.dataset.rv; rankView(); });
+}
+
+const MONTHS = ["januari", "februari", "maart", "april", "mei", "juni", "juli", "augustus", "september", "oktober", "november", "december"];
+const topBy = (arr, f) => { const m = {}; arr.forEach(x => { const k = f(x); if (k) m[k] = (m[k] || 0) + 1; }); return Object.entries(m).sort((a, b) => b[1] - a[1]); };
+
+function wrapped(y) {
+  const yc = catches.filter(c => c.datum.startsWith(y)), mine = yc.filter(c => c.userId === user.uid), sl = [];
+  const bg = ["#0b3b3a,#145a52", "#2a1d5e,#5a2f8f", "#5e1d3a,#c2476b", "#0f3a66,#2a7fd1", "#4a3a0a,#d9a21f", "#0b3b2a,#2f9e6d", "#3a1d5e,#0b2a2e", "#0b2a2e,#145a52"];
+  if (!mine.length) sl.push(`<div class="k">Seizoen ${y}</div><div class="h">Nog geen vangsten dit seizoen 🎣</div><p>Sla een vangst op, dan bouwt je Wrapped zich vanzelf op.</p>`);
+  else {
+    const days = new Set(mine.map(c => c.datum)).size, sp = topBy(mine, c => c.soort), mo = topBy(mine, c => c.datum.slice(5, 7)), wa = topBy(mine, c => (c.water || "").trim());
+    const xp = mine.reduce((a, c) => a + c.xp, 0), bl = mine.reduce((a, c) => c.lengte > a.lengte ? c : a), bw = mine.reduce((a, c) => c.gewicht > a.gewicht ? c : a);
+    const st = Object.values(stats(yc)).sort((a, b) => b.n - a.n || b.xp - a.xp), live = y === curYear, tl = level(stats()[user.uid]?.xp || 0);
+    const plek = c => `${nlDate(c.datum)}${c.water ? " · " + esc(c.water) : ""}`;
+    sl.push(`<div class="k">Seizoen ${y}</div><div class="h">Jouw jaar op het water, ${esc(user.displayName || "visser")}</div><p>Tik om verder te gaan</p>`,
+      `<div class="k">Dit seizoen ving je</div><div class="n">${mine.length}</div><div class="h">vissen</div><p>verdeeld over ${days} ${days === 1 ? "dag" : "dagen"} aan de waterkant</p>`,
+      `<div class="k">Je ving</div><div class="n">${sp.length}</div><div class="h">${sp.length === 1 ? "soort" : "verschillende soorten"}</div><div class="list">${sp.slice(0, 5).map(([k, v]) => `<div class="row"><span>${esc(k)}</span><b>${v}×</b></div>`).join("")}</div>`,
+      `<div class="k">Je grootste vis</div><div class="n">${bl.lengte} cm</div><div class="h">${esc(bl.soort)}</div><p>${plek(bl)}</p>`,
+      `<div class="k">Je zwaarste vis</div><div class="n">${bw.gewicht} kg</div><div class="h">${esc(bw.soort)}</div><p>${plek(bw)}</p>`,
+      `<div class="k">Jouw favorieten</div><div class="h">${esc(sp[0][0])}</div><p>je meest gevangen soort (${sp[0][1]}×)</p><div class="h" style="font-size:1.7rem;margin-top:22px">${MONTHS[+mo[0][0] - 1]}</div><p>je beste maand (${mo[0][1]} vangsten)</p>${wa.length ? `<div class="h" style="font-size:1.7rem;margin-top:22px">${esc(wa[0][0])}</div><p>je favoriete plek</p>` : ""}`,
+      `<div class="k">Je verdiende</div><div class="n">${fmt(xp)}</div><div class="h">XP dit seizoen</div><p>Je level is nu ${tl.nr} · ${tl.naam}</p>`,
+      `<div class="k">${live ? "Tussenstand" : "Seizoenswinnaar"}</div><div class="h">${esc(nameOf(st[0].id))} 🏆</div><p>${st[0].id === user.uid ? (live ? "Jij staat bovenaan!" : "Dat ben jij! 🎉") : "met de meeste vangsten"}</p><div class="list">${st.map((x, i) => `<div class="row"><span>${i + 1}. ${esc(nameOf(x.id))}</span><b>${x.n} vangsten</b></div>`).join("")}</div>`,
+      `<div class="h">${live ? "Het seizoen loopt nog 🎣" : "Tot volgend seizoen 🎣"}</div><p>Een nieuw seizoen begint op 1 januari. Je level en je totalen blijven bewaard.</p>`);
+  }
+  let i = 0; const el = document.createElement("div"); el.className = "wrap"; document.body.appendChild(el);
+  const draw = () => { el.style.background = `linear-gradient(160deg,${bg[i % bg.length]})`;
+    el.innerHTML = `<div class="wp">${sl.map((_, k) => `<i class="${k <= i ? "on" : ""}"></i>`).join("")}</div><button class="wx" aria-label="Sluiten">✕</button><div class="ws">${sl[i]}</div>`;
+    el.querySelector(".wx").onclick = e => { e.stopPropagation(); el.remove(); }; };
+  el.onclick = e => { if (e.clientX < innerWidth / 3) i = Math.max(0, i - 1); else if (i < sl.length - 1) i++; else return el.remove(); draw(); };
+  draw();
 }
 
 function meView() {
-  $("#app").innerHTML = `<h1>Profiel</h1><div class="card"><b>${esc(user.displayName || "")}</b><div class="mute">${esc(user.email)}</div></div><button class="ghost" id="out">Uitloggen</button>`;
+  $("#app").innerHTML = `<h1>Profiel</h1><div class="card"><b>${esc(user.displayName || "")}</b><div class="mute">${esc(user.email)}</div></div>
+  <h2>Wrapped</h2>${yearsList().map(y => `<button class="ghost" data-wr="${y}" style="margin-top:8px">✨ Wrapped ${y}</button>`).join("")}
+  <button class="ghost" id="out" style="margin-top:28px">Uitloggen</button>`;
+  document.querySelectorAll("[data-wr]").forEach(b => b.onclick = () => wrapped(b.dataset.wr));
   $("#out").onclick = () => signOut(auth);
 }
 </script>
