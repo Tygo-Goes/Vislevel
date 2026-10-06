@@ -63,6 +63,10 @@ nav a.on{color:var(--acc)}
 #splash{position:fixed;inset:0;z-index:100;background:linear-gradient(160deg,#0b2a2e,#145a52);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;color:#eaf6f4;transition:opacity .4s}
 #splash img{width:120px;height:120px;border-radius:28px;animation:pu 1.4s ease-in-out infinite}#splash b{font-size:1.8rem}
 @keyframes pu{50%{transform:scale(1.06)}}
+.av{width:36px;height:36px;border-radius:50%;object-fit:cover;display:inline-flex;align-items:center;justify-content:center;background:var(--card2);font-size:1.3rem;flex:none;vertical-align:middle}
+select{width:100%;font:inherit;font-size:1.1rem;padding:14px;border-radius:14px;border:2px solid transparent;background:var(--bg);color:var(--ink)}
+.lockc{opacity:.6}.rx{margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}.rx .cm{width:100%}
+button.small.on{background:var(--acc);color:var(--onacc);border-color:transparent}
 </style>
 </head>
 <body>
@@ -92,7 +96,7 @@ const auth = getAuth(app), db = getFirestore(app);
 
 const PK = "vl_prefs", THEMES = [["diepzee", "🌊 Diepzee"], ["zon", "🌅 Zonsopkomst"], ["bos", "🌲 Bos"], ["nacht", "🌙 Nacht"]];
 let prefs = {}; try { prefs = JSON.parse(localStorage.getItem(PK)) || {}; } catch (e) {}
-prefs = { theme: "diepzee", mode: "dark", order: ["hero", "stats", "season", "duel", "badges"], ...prefs };
+prefs = { theme: "diepzee", mode: "dark", order: ["hero", "sessie", "stats", "season", "bets", "feed", "duel", "badges"], ...prefs };
 let homeEdit = false;
 const isLight = () => prefs.mode === "light" || (prefs.mode === "auto" && matchMedia("(prefers-color-scheme: light)").matches);
 function applyTheme() {
@@ -128,6 +132,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 const nlDate = d => d.split("-").reverse().join("-");
 const BONUS = 50;
 const curYear = String(new Date().getFullYear());
+let usersData = {}, reacts = [], bets = [], sessies = [];
 let lv = curYear, rv = curYear, goals = {}, lvMode = "lijst", cal = { y: +curYear, m: new Date().getMonth(), d: null };
 const isNew = (soort, ex) => !catches.some(c => c.userId === user.uid && c.soort === soort && c.id !== ex);
 
@@ -141,13 +146,15 @@ onAuthStateChanged(auth, u => {
   if (!u) { $("#nav").classList.add("hidden"); return loginView(); }
   $("#nav").classList.remove("hidden");
   setDoc(doc(db, "users", u.uid), { naam: u.displayName || u.email, email: u.email }, { merge: true }).catch(() => {});
-  const u1 = onSnapshot(collection(db, "users"), s => { usersMap = {}; s.forEach(d => usersMap[d.id] = d.data().naam); render(); });
+  const u1 = onSnapshot(collection(db, "users"), s => { usersMap = {}; usersData = {}; s.forEach(d => { usersMap[d.id] = d.data().naam; usersData[d.id] = d.data(); }); render(); });
   const u2 = onSnapshot(collection(db, "catches"), s => {
     catches = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.datum.localeCompare(a.datum) || 0);
     render();
   }, e => console.error(e));
   const u3 = onSnapshot(collection(db, "goals"), s => { goals = {}; s.forEach(d => goals[d.id] = d.data().doel); render(); }, () => {});
-  unsub = () => { u1(); u2(); u3(); };
+  const mk = (n, f) => onSnapshot(collection(db, n), s => { f(s.docs.map(d => ({ id: d.id, ...d.data() }))); render(); }, () => {});
+  const u4 = mk("reacties", a => reacts = a), u5 = mk("weddenschappen", a => bets = a), u6 = mk("sessies", a => sessies = a);
+  unsub = () => { u1(); u2(); u3(); u4(); u5(); u6(); };
 });
 
 function loginView(mode = "in") {
@@ -223,7 +230,7 @@ function home() {
   let duel = "";
   if (other) {
     const a = s.xp, b = other.xp, d = Math.abs(a - b), pa = a + b ? a / (a + b) * 100 : 50, nm = esc(nameOf(other.id));
-    duel = `<h2>Duel</h2><div class="card"><div class="row"><b>${esc(user.displayName || "Jij")}</b><b>${nm}</b></div>
+    duel = `<h2>Duel</h2><div class="card"><div class="row"><b>${av(user.uid)} ${esc(user.displayName || "Jij")}</b><b>${nm} ${av(other.id)}</b></div>
     <div class="bar" style="display:flex"><i style="width:${pa}%"></i><i style="width:${100 - pa}%;background:var(--ok)"></i></div>
     <div class="row"><span class="xp">${fmt(a)} XP</span><span style="color:var(--ok);font-weight:800">${fmt(b)} XP</span></div>
     <div class="mute" style="margin-top:8px">${d === 0 ? "Gelijkspel!" : a > b ? `Jij staat ${fmt(d)} XP voor op ${nm}` : `${nm} staat ${fmt(d)} XP voor`}</div></div>`;
@@ -238,7 +245,8 @@ function home() {
     <button class="small" id="seen" style="margin-top:10px">Oké</button></div>` : "";
 
   const tier = lvlTier(L.nr); document.documentElement.style.setProperty("--lvl", tier[1]);
-  const NAMES = { hero: "Level", stats: "Statistieken", season: "Seizoen en doel", duel: "Duel", badges: "Badges" };
+  const sb = seasonBadges(curYear, user.uid);
+  const NAMES = { hero: "Level", stats: "Statistieken", season: "Seizoen en doel", duel: "Duel", badges: "Badges", sessie: "Visdag", bets: "Weddenschappen", feed: "Laatste vangsten" };
   const blocks = {
     hero: `<div class="card hero"><div class="mute">Level ${L.nr} · ${L.naam} · ${tier[0]}</div><div class="big">${fmt(s.xp)} XP</div>
       <div class="wave"><div class="f" style="width:${pct}%"></div></div>
@@ -249,18 +257,21 @@ function home() {
       <div class="card"><b>${s.maxL ? s.maxL.lengte + " cm" : "–"}</b><span class="mute">Grootste vis</span></div>
       <div class="card"><b>${s.maxW ? s.maxW.gewicht + " kg" : "–"}</b><span class="mute">Zwaarste vis</span></div></div>`,
     season: `<div class="card row"><span class="mute">Seizoen ${curYear}</span><b>${sm.length} vangsten · <span class="xp">${fmt(sm.reduce((a, c) => a + c.xp, 0))} XP</span></b></div>${cmpLine()}${goalCard()}<button id="wr" class="${new Date().getMonth() === 11 ? "" : "ghost"}" style="margin-top:0">✨ Wrapped ${curYear}</button>`,
+    sessie: sessieHtml(), bets: betsHtml(), feed: feedHtml(),
     duel,
-    badges: `<h2>Badges ${BADGES.filter(b => b[3](m)).length}/${BADGES.length}</h2><div class="badges">${BADGES.map((b, i) => `<div class="bd ${b[3](m) ? "" : "lock"}" data-i="${i}">${b[0]}<small>${b[1]}</small></div>`).join("")}</div><p class="mute" style="margin-top:10px;font-size:.9rem">Tik op een badge om te zien hoe je hem krijgt.</p>`
+    badges: `<h2>Badges ${BADGES.filter(b => b[3](m)).length}/${BADGES.length}</h2><div class="badges">${BADGES.map((b, i) => `<div class="bd ${b[3](m) ? "" : "lock"}" data-i="${i}">${b[0]}<small>${b[1]}</small></div>`).join("")}</div><p class="mute" style="margin-top:10px;font-size:.9rem">Tik op een badge om te zien hoe je hem krijgt.</p><h2>Seizoensbadges ${curYear}</h2><div class="badges">${sb.map((b, i) => `<div class="bd ${b[3] ? "" : "lock"}" data-sb="${i}">${b[0]}<small>${b[1]}</small></div>`).join("")}</div>`
   };
   const order = [...prefs.order.filter(k => blocks[k]), ...Object.keys(blocks).filter(k => blocks[k] && !prefs.order.includes(k))];
   const body = order.map(k => (homeEdit ? `<div class="row" style="margin:6px 0"><b>${NAMES[k]}</b><span><button class="small ghost" data-mv="${k}:-1">▲</button> <button class="small ghost" data-mv="${k}:1">▼</button></span></div>` : "") + `<div style="margin-bottom:4px">${blocks[k]}</div>`).join("");
-  $("#app").innerHTML = `<h1>Hoi ${esc(user.displayName || "visser")} 👋</h1><div style="margin:8px 0 12px">${titlesFor(user.uid).map(t => `<span class="tt">${t}</span>`).join("")}</div>${banner}${body}
+  $("#app").innerHTML = `<h1>${av(user.uid)} Hoi ${esc(user.displayName || "visser")} 👋</h1><div style="margin:8px 0 12px">${titlesFor(user.uid).map(t => `<span class="tt">${t}</span>`).join("")}</div>${banner}${body}
   <button class="ghost" id="edit" style="margin-top:12px">${homeEdit ? "✔ Klaar" : "↕ Volgorde aanpassen"}</button>
   ${s.n ? "" : `<p class="mute" style="margin-top:16px">Nog geen vangsten. Tik op Vangst en sla je eerste vis op.</p>`}`;
   $("#edit").onclick = () => { homeEdit = !homeEdit; home(); };
+  wireReacts(); wireBets(); wireSes();
+  document.querySelectorAll("[data-sb]").forEach(el => el.onclick = () => { const b = sb[el.dataset.sb]; alert(b[1] + (b[3] ? " ✅" : " 🔒") + "\n" + b[2]); });
   document.querySelectorAll("[data-mv]").forEach(b => b.onclick = () => { const [k, d] = b.dataset.mv.split(":"), o = [...order], i = o.indexOf(k), j = i + +d;
     if (j < 0 || j >= o.length) return; [o[i], o[j]] = [o[j], o[i]]; prefs.order = o; savePrefs(); home(); });
-  document.querySelectorAll(".bd").forEach(el => el.onclick = () => { const b = BADGES[el.dataset.i]; alert(b[1] + (b[3](m) ? " ✅" : " 🔒") + "\n" + b[2]); });
+  document.querySelectorAll(".bd[data-i]").forEach(el => el.onclick = () => { const b = BADGES[el.dataset.i]; alert(b[1] + (b[3](m) ? " ✅" : " 🔒") + "\n" + b[2]); });
   $("#wr").onclick = () => wrapped(curYear);
   $("#goal").onclick = setGoal;
   if ($("#seen")) $("#seen").onclick = () => { try { localStorage.setItem(key, Date.now()); } catch (e) {} home(); };
@@ -269,9 +280,9 @@ function home() {
 const RECB = 25, RELB = 10;
 let editing = null, foto = null;
 const ownBest = (soort, ex) => { const l = catches.filter(c => c.userId === user.uid && c.soort === soort && c.id !== ex); return { L: Math.max(0, ...l.map(c => c.lengte)), W: Math.max(0, ...l.map(c => c.gewicht)) }; };
-const resize = file => new Promise((ok, no) => { const img = new Image(), u = URL.createObjectURL(file);
-  img.onload = () => { const s = Math.min(1, 800 / Math.max(img.width, img.height)), cv = document.createElement("canvas"); cv.width = img.width * s; cv.height = img.height * s;
-    cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height); URL.revokeObjectURL(u); ok(cv.toDataURL("image/jpeg", 0.6)); };
+const resize = (file, max = 800, q = 0.6) => new Promise((ok, no) => { const img = new Image(), u = URL.createObjectURL(file);
+  img.onload = () => { const s = Math.min(1, max / Math.max(img.width, img.height)), cv = document.createElement("canvas"); cv.width = img.width * s; cv.height = img.height * s;
+    cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height); URL.revokeObjectURL(u); ok(cv.toDataURL("image/jpeg", q)); };
   img.onerror = no; img.src = u; });
 
 function levelUp(L) {
@@ -303,7 +314,7 @@ function addView() {
   };
   const line = (t, v) => v ? `<div class="row"><span class="mute">${t}</span><span>+${v}</span></div>` : "";
   const upd = () => { const x = calcAll();
-    $("#pv").innerHTML = x ? `<div class="t">${x.tot} XP</div>${line("Basis", x.r.basis)}${line("Lengte", x.r.lengte)}${line("Gewicht", x.r.gewicht)}${line("Nieuwe soort 🎉", x.nb)}${line("Nieuw record 🏅", x.rb)}${line("Teruggezet 🔄", x.lb)}` : `<span class="mute">Kies een vissoort uit de lijst.</span>`; };
+    $("#pv").innerHTML = x ? `<div class="t">${x.tot} XP</div>${line("Basis", x.r.basis)}${line("Lengte", x.r.lengte)}${line("Gewicht", x.r.gewicht)}${line("Nieuwe soort 🎉", x.nb)}${line("Nieuw record 🏅", x.rb)}${line("Teruggezet 🔄", x.lb)}<div class="mute" style="margin-top:10px">💡 ${FACTS[x.soort] || ""}</div>` : `<span class="mute">Kies een vissoort uit de lijst.</span>`; };
   ["fish", "cm", "kg"].forEach(i => $("#" + i).oninput = upd); $("#rel").onchange = upd; upd();
   $("#foto").onchange = async ev => { const f = ev.target.files[0]; if (!f) return;
     try { foto = await resize(f); $("#fp").innerHTML = `<img class="ph" src="${foto}">`; } catch (x) { $("#err").textContent = "Deze foto kon niet worden geladen."; } };
@@ -372,15 +383,129 @@ function calHtml() {
   <p class="mute" style="margin:10px 0">${mine.length} vangsten · ${new Set(mine.map(c => c.datum)).size} dagen gevist</p>
   ${(by[cal.d] || []).map(c => `<div class="card row"><b>🐟 ${esc(c.soort)}</b><span class="mute">${c.lengte} cm · ${c.gewicht} kg</span></div>`).join("")}`;
 }
+const EM = ["🔥", "👏", "😮", "🎣"], AVATARS = ["🎣", "🐟", "🦈", "🐊", "🐙", "🐸", "🦆", "🦅", "🐻", "🦊", "🐳", "🦦"];
+const av = id => { const d = usersData[id] || {}; return d.avatarFoto ? `<img class="av" src="${d.avatarFoto}" alt="">` : `<span class="av">${d.avatar || "🎣"}</span>`; };
+const FACTS = {Voorntje:"Klein schoolvisje dat vaak als aasvis dient en lekker eten is voor roofvis.",Rietvoorn:"Herken je aan de rode vinnen en de gouden glans; erg talrijk in Nederlandse wateren.",Kolblei:"Lijkt op een kleine brasem, maar heeft grotere ogen.",Bliek:"Zilverkleurige vis die vaak vlak onder het oppervlak zwemt.",Brasem:"Bodemvis die in scholen foerageert en ruim 60 cm kan worden.",Giebel:"Een taaie vis die zelfs in zuurstofarm water kan overleven.",Baars:"Gestreepte roofvis met een stekelige rugvin die vaak in groepen jaagt.",Zeelt:"Heeft een slijmerige huid en leeft het liefst op zachte, begroeide bodem.",Winde:"Goudkleurige karperachtige die graag in rivieren en bij stroming zit.",Kroeskarper:"Kleine, taaie karperachtige met een hoge, bolle rug.",Paling:"Trekt om te paaien duizenden kilometers naar de Sargassozee.",Karper:"Kan tientallen jaren oud worden en meer dan 20 kilo wegen.",Schubkarper:"De klassieke karper met een volledig schubbenkleed.",Snoek:"Roofvis die bijna roerloos op de loer ligt en dan explosief toeslaat.",Spiegelkarper:"Heeft grote, verspreide schubben, vandaar de naam spiegel.",Roofblei:"Roofzuchtige karperachtige die vooral in rivieren op kleine vis jaagt.",Graskarper:"Eet planten en wordt soms ingezet om waterplanten te beheersen.",Snoekbaars:"Ziet goed in troebel water en jaagt vooral in de schemering.",Meerval:"Europa's grootste zoetwatervis; kan meer dan twee meter worden.",Rivierkreeft:"Geen vis maar een kreeftachtige; in Nederland leven vooral uitheemse soorten.",Pos:"Kleine baarsachtige met een stekelige rugvin die in veel sloten leeft.",Bittervoorn:"Legt de eitjes in een zoetwatermossel, met een lange legbuis van het vrouwtje.",
+"Zwarte grondel":"Een uitheemse grondel die zich snel verspreidt in Nederlandse wateren.",Serpeling:"Verwant aan de voorn en houdt van schoon, stromend water.",Kopvoorn:"Een grote voorn met een brede kop die graag in stromend water zit.",Barbeel:"Heeft vier baarddraden aan de bek en houdt van stromend water.",Forel:"Heeft koud, helder en zuurstofrijk water nodig.",Regenboogforel:"Komt oorspronkelijk uit Noord-Amerika en is bekend om de roze streep.",Steur:"Een prehistorische vis die in Nederland zeldzaam en beschermd is."};
+
+function reactBar(c, own) {
+  const rs = reacts.filter(r => r.catchId === c.id), mine = rs.find(r => r.userId === user.uid), cnt = e => rs.filter(r => r.emoji === e).length;
+  return `<div class="rx">${own ? EM.filter(cnt).map(e => `<span class="tt">${e} ${cnt(e)}</span>`).join("") : EM.map(e => `<button class="small ghost ${mine?.emoji === e ? "on" : ""}" data-rx="${c.id}:${e}">${e}${cnt(e) || ""}</button>`).join("") + `<button class="small ghost" data-rc="${c.id}">💬</button>`}
+  ${rs.filter(r => r.tekst).map(r => `<div class="mute cm">${esc(nameOf(r.userId))}: ${esc(r.tekst)}</div>`).join("")}</div>`;
+}
+function wireReacts() {
+  document.querySelectorAll("[data-rx]").forEach(b => b.onclick = async () => { const [cid, e] = b.dataset.rx.split(":"), id = cid + "_" + user.uid, cur = reacts.find(r => r.id === id);
+    try { if (cur && cur.emoji === e && !cur.tekst) await deleteDoc(doc(db, "reacties", id)); else await setDoc(doc(db, "reacties", id), { catchId: cid, userId: user.uid, emoji: cur?.emoji === e ? "" : e, tekst: cur?.tekst || "" }); } catch (x) { alert("Reageren mislukt. Staan de nieuwe regels in Firebase?"); } });
+  document.querySelectorAll("[data-rc]").forEach(b => b.onclick = async () => { const cid = b.dataset.rc, id = cid + "_" + user.uid, cur = reacts.find(r => r.id === id), t = prompt("Je reactie:", cur?.tekst || ""); if (t === null) return;
+    try { await setDoc(doc(db, "reacties", id), { catchId: cid, userId: user.uid, emoji: cur?.emoji || "", tekst: t.trim().slice(0, 140) }); } catch (x) { alert("Reageren mislukt."); } });
+}
+const feedHtml = () => `<h2>Laatste vangsten</h2>` + (catches.slice(0, 5).map(c => `<div class="card"><div class="row"><span class="row" style="gap:8px">${av(c.userId)}<b>${esc(nameOf(c.userId))}</b></span><span class="xp">${c.xp} XP</span></div>
+  <div style="margin-top:6px">🐟 ${esc(c.soort)} · ${c.lengte} cm · ${c.gewicht} kg</div><div class="mute">${esc(c.water || "")} ${nlDate(c.datum)}</div>${c.foto ? `<img class="ph" src="${c.foto}">` : ""}${reactBar(c, c.userId === user.uid)}</div>`).join("") || `<p class="mute">Nog geen vangsten.</p>`);
+
+const METRICS = [["n", "Meeste vangsten"], ["s", "Meeste soorten"], ["l", "Grootste vis"], ["w", "Zwaarste vis"], ["x", "Meeste XP"], ["v", "Vrij: wij kiezen zelf de winnaar"]], unit = { n: "vangsten", s: "soorten", l: "cm", w: "kg", x: "XP" };
+const score = (id, b) => { const l = catches.filter(c => c.userId === id && c.datum >= b.van && c.datum <= b.tot);
+  return b.type === "n" ? l.length : b.type === "s" ? new Set(l.map(c => c.soort)).size : b.type === "l" ? Math.max(0, ...l.map(c => c.lengte)) : b.type === "w" ? Math.max(0, ...l.map(c => c.gewicht)) : b.type === "x" ? l.reduce((a, c) => a + c.xp, 0) : 0; };
+const isDone = b => b.status === "klaar" || (b.type !== "v" && today() > b.tot);
+function betCard(b) {
+  const ids = Object.keys(usersMap), sc = ids.map(id => ({ id, v: score(id, b) })).sort((a, c) => c.v - a.v), auto = b.type !== "v", done = isDone(b);
+  const win = b.winnaar || (done && auto && sc.length ? (sc.length > 1 && sc[0].v === sc[1].v ? "gelijk" : sc[0].id) : null), days = Math.max(0, Math.ceil((Date.parse(b.tot) - Date.parse(today())) / 864e5));
+  return `<div class="card"><div class="row"><b>🎲 ${esc(b.titel)}</b><button class="small ghost" data-bdel="${b.id}">✕</button></div>
+  <div class="mute">${nlDate(b.van)} t/m ${nlDate(b.tot)} · ${METRICS.find(m => m[0] === b.type)[1]}${b.inzet ? ` · Inzet: ${esc(b.inzet)}` : ""}</div>
+  ${auto ? sc.map(x => `<div class="row" style="margin-top:8px"><span class="row" style="gap:8px">${av(x.id)}<b>${esc(nameOf(x.id))}</b></span><b class="xp">${x.v}${unit[b.type] ? " " + unit[b.type] : ""}</b></div>`).join("") : ""}
+  ${win ? `<div style="margin-top:10px;font-weight:800">🏆 ${win === "gelijk" ? "Gelijkspel!" : esc(nameOf(win)) + " wint!"}${b.inzet ? ` <span class="mute">(${esc(b.inzet)})</span>` : ""}</div>`
+    : auto ? `<div class="mute" style="margin-top:10px">Nog ${days} ${days === 1 ? "dag" : "dagen"}</div>`
+    : `<div class="mute" style="margin-top:10px">Wie heeft gewonnen?</div><div>${ids.map(id => `<button class="small" style="margin:6px 6px 0 0" data-bw="${b.id}:${id}">${esc(nameOf(id))}</button>`).join("")}<button class="small ghost" style="margin-top:6px" data-bw="${b.id}:gelijk">Gelijkspel</button></div>`}</div>`;
+}
+function betsHtml() {
+  const act = bets.filter(b => !isDone(b)).sort((a, b) => a.tot.localeCompare(b.tot)), fin = bets.filter(isDone).sort((a, b) => b.tot.localeCompare(a.tot));
+  return `<h2>Weddenschappen</h2>${act.map(betCard).join("")}<button class="ghost" id="newbet" style="margin-top:0">+ Nieuwe weddenschap</button>${fin.length ? `<div class="mute" style="margin:14px 0 8px">Afgerond</div>${fin.slice(0, 3).map(betCard).join("")}` : ""}`;
+}
+function betForm() {
+  const el = document.createElement("div"), in7 = new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10);
+  el.className = "wrap"; el.style.cssText = "background:var(--bg);color:var(--ink);overflow:auto";
+  el.innerHTML = `<div class="ws" style="justify-content:flex-start;padding-top:16px"><h1>Nieuwe weddenschap</h1>
+  <label>Wat is de weddenschap?</label><input id="bt" placeholder="Wie vangt de grootste snoek?">
+  <label>Hoe bepalen we de winnaar?</label><select id="bm">${METRICS.map(([k, n]) => `<option value="${k}">${n}</option>`).join("")}</select>
+  <label>Van</label><input id="bv" type="date" value="${today()}"><label>Tot en met</label><input id="bto" type="date" value="${in7}">
+  <label>Inzet (optioneel)</label><input id="bi" placeholder="De verliezer trakteert">
+  <div class="err" id="be"></div><button id="bs">Weddenschap starten</button><button class="ghost" id="bc">Annuleren</button></div>`;
+  document.body.appendChild(el); el.querySelector("#bc").onclick = () => el.remove();
+  el.querySelector("#bs").onclick = async () => { const g = i => el.querySelector(i).value.trim(), titel = g("#bt"), van = g("#bv"), tot = g("#bto");
+    if (!titel) return el.querySelector("#be").textContent = "Geef de weddenschap een naam.";
+    if (!van || !tot || tot < van) return el.querySelector("#be").textContent = "Controleer de datums.";
+    try { await addDoc(collection(db, "weddenschappen"), { titel, type: g("#bm"), van, tot, inzet: g("#bi"), maker: user.uid, status: "open", winnaar: null, aangemaakt: serverTimestamp() }); el.remove(); }
+    catch (e) { el.querySelector("#be").textContent = "Opslaan mislukt. Staan de nieuwe regels in Firebase?"; } };
+}
+function wireBets() {
+  if ($("#newbet")) $("#newbet").onclick = betForm;
+  document.querySelectorAll("[data-bdel]").forEach(b => b.onclick = () => { if (confirm("Deze weddenschap verwijderen?")) deleteDoc(doc(db, "weddenschappen", b.dataset.bdel)); });
+  document.querySelectorAll("[data-bw]").forEach(b => b.onclick = () => { const [id, w] = b.dataset.bw.split(":"); updateDoc(doc(db, "weddenschappen", id), { winnaar: w, status: "klaar" }); });
+}
+
+const mySes = () => sessies.filter(s => s.userId === user.uid).sort((a, b) => b.start - a.start);
+const durF = ms => { const m = Math.floor(ms / 60000); return `${Math.floor(m / 60)}u ${String(m % 60).padStart(2, "0")}m`; }, dd = ms => new Date(ms).toLocaleDateString("nl-NL");
+const sesCatches = s => catches.filter(c => { const t = c.aangemaakt?.toMillis?.() || 0; return c.userId === s.userId && t >= s.start && (!s.eind || t <= s.eind + 600000); });
+function sessieHtml() {
+  const a = mySes().find(x => !x.eind);
+  if (!a) return `<div class="card row"><span><b>Visdag</b><div class="mute">Houd bij hoe lang je vist en wat je vangt</div></span><button class="small" id="sstart">Start</button></div>`;
+  const n = sesCatches(a).length, h = (Date.now() - a.start) / 36e5;
+  return `<div class="card hero"><div class="mute">Visdag bezig 🎣</div><div class="big" id="sx" style="font-size:2.4rem">${durF(Date.now() - a.start)}</div><div class="mute">${n} vangsten${h > 0.1 ? ` · ${(n / h).toFixed(1)} per uur` : ""}</div><button id="sstop">Stop visdag</button></div>`;
+}
+function wireSes() {
+  if ($("#sstart")) $("#sstart").onclick = () => addDoc(collection(db, "sessies"), { userId: user.uid, start: Date.now(), eind: null }).catch(() => alert("Starten mislukt. Staan de nieuwe regels in Firebase?"));
+  if ($("#sstop")) $("#sstop").onclick = () => { const a = mySes().find(x => !x.eind); if (a) updateDoc(doc(db, "sessies", a.id), { eind: Date.now() }); };
+}
+setInterval(() => { const a = user && sessies.find(x => x.userId === user.uid && !x.eind), el = document.querySelector("#sx"); if (a && el) el.textContent = durF(Date.now() - a.start); }, 20000);
+function sesHtml() {
+  const l = mySes().filter(s => s.eind);
+  if (!l.length) return `<p class="mute">Nog geen afgeronde visdagen. Start er een op Home.</p>`;
+  const rows = l.map(s => { const c = sesCatches(s), h = (s.eind - s.start) / 36e5; return { s, n: c.length, ph: h > 0.05 ? c.length / h : 0, bl: bestOf(c, "lengte") }; }), best = rows.reduce((m, r) => !m || r.n > m.n ? r : m, null);
+  return `<div class="card"><div class="mute">Beste visdag</div><b>${dd(best.s.start)} · ${best.n} vangsten in ${durF(best.s.eind - best.s.start)}</b></div>` + rows.map(r => `<div class="card"><div class="row"><b>${dd(r.s.start)}</b><span class="xp">${durF(r.s.eind - r.s.start)}</span></div><div class="mute">${r.n} vangsten · ${r.ph.toFixed(1)} per uur${r.bl ? ` · grootste ${esc(r.bl.soort)} ${r.bl.lengte} cm` : ""}</div></div>`).join("");
+}
+function seasonBadges(y, id) {
+  const l = catches.filter(c => c.userId === id && c.datum.startsWith(y)), mo = c => +c.datum.slice(5, 7), has = (re, ms) => l.some(c => re.test(c.soort) && ms.includes(mo(c)));
+  const st = Object.values(stats(catches.filter(c => c.datum.startsWith(y)))).sort((a, b) => b.n - a.n || b.xp - a.xp), won = y < curYear && st[0]?.id === id && st[0].n > 0;
+  return [["🎆", "Jaarstarter", "Vang iets in januari", l.some(c => mo(c) === 1)], ["🥶", "Winterbaars", "Vang een baars in december, januari of februari", has(/^Baars$/, [12, 1, 2])],
+    ["🌷", "Lentesnoek", "Vang een snoek in maart, april of mei", has(/^Snoek$/, [3, 4, 5])], ["☀️", "Zomerkarper", "Vang een karper in juni, juli of augustus", has(/karper/i, [6, 7, 8])],
+    ["🍂", "Herfstvisser", "Vang 10 vissen in september, oktober en november", l.filter(c => [9, 10, 11].includes(mo(c))).length >= 10], ["🌈", "Soortenjager", "Vang 8 soorten in één seizoen", new Set(l.map(c => c.soort)).size >= 8],
+    ["💯", "Honderd", "Vang 100 vissen in één seizoen", l.length >= 100], ["🏁", "Seizoenswinnaar", "Win een afgesloten seizoen", won]];
+}
+function lineChart(ser) {
+  const W = 320, H = 180, L = 36, B = 22, T = 10, R = 8, all = ser.flatMap(s => s.pts), t0 = Math.min(...all.map(p => p[0])) - 1, t1 = Math.max(...all.map(p => p[0]), t0 + 2), ym = Math.max(...all.map(p => p[1]), 1);
+  const X = t => L + (t - t0) / (t1 - t0) * (W - L - R), Y = v => H - B - v / ym * (H - B - T), dt = t => new Date(t * 864e5).toISOString().slice(5, 10).split("-").reverse().join("-");
+  const paths = ser.map(s => { const p = [[t0, 0], ...s.pts, [t1, s.pts[s.pts.length - 1][1]]]; return `<path d="${p.map((q, i) => (i ? "L" : "M") + X(q[0]).toFixed(1) + " " + Y(q[1]).toFixed(1)).join(" ")}" fill="none" style="stroke:${s.color}" stroke-width="3" stroke-linejoin="round"/>`; }).join("");
+  const tx = (x, y, a, t) => `<text x="${x}" y="${y}" text-anchor="${a}" font-size="10" style="fill:var(--mute)">${t}</text>`;
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%"><line x1="${L}" y1="${H - B}" x2="${W - R}" y2="${H - B}" style="stroke:var(--card2)"/>${tx(L - 4, T + 8, "end", fmt(ym))}${tx(L - 4, H - B, "end", 0)}${tx(L, H - 6, "start", dt(t0 + 1))}${tx(W - R, H - 6, "end", dt(t1))}${paths}</svg>`;
+}
+function barChart(v) {
+  const W = 320, H = 150, B = 20, T = 16, mx = Math.max(1, ...v), bw = (W - 20) / 12;
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%">${v.map((n, i) => { const h = n / mx * (H - B - T), x = 10 + i * bw;
+    return `<rect x="${x + 3}" y="${H - B - h}" width="${bw - 6}" height="${h}" rx="4" style="fill:var(--acc)"/>${n ? `<text x="${x + bw / 2}" y="${H - B - h - 4}" text-anchor="middle" font-size="10" style="fill:var(--ink)">${n}</text>` : ""}<text x="${x + bw / 2}" y="${H - 5}" text-anchor="middle" font-size="10" style="fill:var(--mute)">${MONTHS[i][0].toUpperCase()}</text>`; }).join("")}</svg>`;
+}
+function chartsHtml() {
+  const cols = ["var(--acc)", "var(--ok)", "#6ab0ff", "#ff8f7a"], day = d => Date.parse(d) / 864e5, yr = lv === "all" ? curYear : lv;
+  const ser = Object.keys(usersMap).map((id, i) => { let a = 0; const m = {}; catches.filter(c => c.userId === id).sort((x, y) => x.datum.localeCompare(y.datum)).forEach(c => { a += c.xp; m[c.datum] = a; });
+    return { id, color: cols[i % 4], pts: Object.entries(m).map(([d, v]) => [day(d), v]) }; }).filter(s => s.pts.length);
+  const mo = Array(12).fill(0); catches.filter(c => c.userId === user.uid && c.datum.startsWith(yr)).forEach(c => mo[+c.datum.slice(5, 7) - 1]++);
+  return `<h2>XP over tijd</h2><div class="card">${ser.length ? lineChart(ser) : `<p class="mute">Nog geen data.</p>`}<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px">${ser.map(s => `<span><i style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${s.color}"></i> ${esc(nameOf(s.id))}</span>`).join("")}</div></div>
+  <h2>Mijn vangsten per maand</h2><div class="chips">${yearsList().map(y => `<div class="chip ${yr === y ? "on" : ""}" data-lv="${y}">Seizoen ${y}</div>`).join("")}</div><div class="card">${barChart(mo)}</div>`;
+}
+function guideHtml() {
+  const mine = catches.filter(c => c.userId === user.uid);
+  return `<p class="mute" style="margin-bottom:12px">${new Set(mine.map(c => c.soort)).size} van ${Object.keys(FISH).length} soorten gevangen</p>` + Object.keys(FISH).sort().map(k => { const l = mine.filter(c => c.soort === k), b = bestOf(l, "lengte");
+    return `<div class="card ${l.length ? "" : "lockc"}"><div class="row"><b>${l.length ? "🐟" : "🔒"} ${esc(k)}</b><span class="xp">${FISH[k][0]} XP basis</span></div><div class="mute" style="margin-top:4px">${FACTS[k] || ""}</div><div style="margin-top:6px">${l.length ? `Gevangen: ${l.length}× · beste ${b.lengte} cm` : `<span class="mute">Nog niet gevangen</span>`}</div></div>`; }).join("");
+}
 const yearsList = () => [...new Set([curYear, ...catches.map(c => c.datum.slice(0, 4))])].sort().reverse();
 const chips = (cur, a) => yearsList().map(y => `<div class="chip ${cur === y ? "on" : ""}" data-${a}="${y}">Seizoen ${y}</div>`).join("") + `<div class="chip ${cur === "all" ? "on" : ""}" data-${a}="all">Alle tijd</div>`;
 const inYear = (c, y) => y === "all" || c.datum.startsWith(y);
 
 function listView() {
-  const kal = lvMode === "kal", mine = catches.filter(c => c.userId === user.uid && inYear(c, lv)), sum = mine.reduce((a, c) => a + c.xp, 0);
-  $("#app").innerHTML = `<h1>Mijn vangsten</h1><div class="chips"><div class="chip ${kal ? "" : "on"}" data-md="lijst">Lijst</div><div class="chip ${kal ? "on" : ""}" data-md="kal">Kalender</div></div>`
-    + (kal ? calHtml() : `<div class="chips">${chips(lv, "lv")}</div><p class="mute" style="margin-bottom:12px">${mine.length} vangsten · ${fmt(sum)} XP</p>` + (mine.length ? mine.map(c => `<div class="card"><div class="row"><b>🐟 ${esc(c.soort)}</b><span class="xp">${c.xp} XP</span></div>
-  <div class="mute">${c.lengte} cm · ${c.gewicht} kg${c.bonus ? ` · 🎉 +${c.bonus} nieuwe soort` : ""}${c.recbonus ? ` · 🏅 +${c.recbonus} record` : ""}${c.teruggezet ? " · 🔄 teruggezet" : ""}</div>${c.foto ? `<img class="ph" src="${c.foto}">` : ""}<div class="row"><span class="mute">${esc(c.water || "")} ${nlDate(c.datum)}</span><span><button class="ghost small" data-ed="${c.id}">Bewerken</button> <button class="ghost small" data-del="${c.id}">Verwijderen</button></span></div></div>`).join("") : `<p class="mute">Geen vangsten in deze periode.</p>`));
+  const mine = catches.filter(c => c.userId === user.uid && inYear(c, lv)), sum = mine.reduce((a, c) => a + c.xp, 0);
+  const tabs = [["lijst", "Lijst"], ["kal", "Kalender"], ["graf", "Grafieken"], ["ses", "Sessies"], ["gids", "Gids"]];
+  const listHtml = `<div class="chips">${chips(lv, "lv")}</div><p class="mute" style="margin-bottom:12px">${mine.length} vangsten · ${fmt(sum)} XP</p>` + (mine.length ? mine.map(c => `<div class="card"><div class="row"><b>🐟 ${esc(c.soort)}</b><span class="xp">${c.xp} XP</span></div>
+  <div class="mute">${c.lengte} cm · ${c.gewicht} kg${c.bonus ? ` · 🎉 +${c.bonus} nieuwe soort` : ""}${c.recbonus ? ` · 🏅 +${c.recbonus} record` : ""}${c.teruggezet ? " · 🔄 teruggezet" : ""}</div>${c.foto ? `<img class="ph" src="${c.foto}">` : ""}${reactBar(c, true)}<div class="row" style="margin-top:8px"><span class="mute">${esc(c.water || "")} ${nlDate(c.datum)}</span><span><button class="ghost small" data-ed="${c.id}">Bewerken</button> <button class="ghost small" data-del="${c.id}">Verwijderen</button></span></div></div>`).join("") : `<p class="mute">Geen vangsten in deze periode.</p>`);
+  const body = { kal: calHtml, graf: chartsHtml, ses: sesHtml, gids: guideHtml }[lvMode]?.() ?? listHtml;
+  $("#app").innerHTML = `<h1>Mijn vangsten</h1><div class="chips">${tabs.map(([k, n]) => `<div class="chip ${lvMode === k ? "on" : ""}" data-md="${k}">${n}</div>`).join("")}</div>${body}`;
   document.querySelectorAll("[data-md]").forEach(b => b.onclick = () => { lvMode = b.dataset.md; listView(); });
   document.querySelectorAll("[data-lv]").forEach(b => b.onclick = () => { lv = b.dataset.lv; listView(); });
   document.querySelectorAll("[data-del]").forEach(b => b.onclick = () => { if (confirm("Deze vangst verwijderen?")) deleteDoc(doc(db, "catches", b.dataset.del)); });
@@ -397,7 +522,7 @@ function rankView() {
     return `<div class="card"><div class="mute">${label}</div>${b ? `<div class="row"><b>${esc(nameOf(b.userId))} · ${esc(b.soort)}</b><span class="xp">${b[key]} ${unit}</span></div>` : "–"}</div>`; };
   $("#app").innerHTML = `<h1>Ranglijst</h1><div class="chips">${chips(rv, "rv")}</div><p class="mute" style="margin-bottom:12px">${all ? "Alle tijd: gesorteerd op XP" : `Seizoen ${rv}: wie de meeste vangsten heeft, wint`}</p>`
     + st.map((s, i) => { const L = level(stats()[s.id]?.xp || 0);
-      return `<div class="card row"><div class="row"><span class="rank">${medal[i] || i + 1}</span><div><b>${esc(nameOf(s.id))}</b> <span class="xp" style="font-size:.85rem">${esc(titlesFor(s.id)[0] || "")}</span><div class="mute">${all ? `Level ${L.nr} · ${L.naam}` : `${fmt(s.xp)} XP · ${s.soorten.size} soorten`}</div></div></div><span class="xp">${all ? fmt(s.xp) + " XP" : s.n + " vangsten"}</span></div>`; }).join("")
+      return `<div class="card row"><div class="row"><span class="rank">${medal[i] || i + 1}</span>${av(s.id)}<div><b>${esc(nameOf(s.id))}</b> <span class="xp" style="font-size:.85rem">${esc(titlesFor(s.id)[0] || "")}</span><div class="mute">${all ? `Level ${L.nr} · ${L.naam}` : `${fmt(s.xp)} XP · ${s.soorten.size} soorten`}</div></div></div><span class="xp">${all ? fmt(s.xp) + " XP" : s.n + " vangsten"}</span></div>`; }).join("")
     + `<h2>Records</h2>` + rec("lengte", "cm", "Grootste vis") + rec("gewicht", "kg", "Zwaarste vis") + rec("xp", "XP", "Meeste XP uit één vangst") + hallOfFame();
   document.querySelectorAll("[data-rv]").forEach(b => b.onclick = () => { rv = b.dataset.rv; rankView(); });
 }
@@ -437,7 +562,9 @@ function meView() {
   const bySp = {}; catches.forEach(c => { const o = bySp[c.soort] ||= { l: null, w: null, ml: null, mw: null }; if (!o.l || c.lengte > o.l.lengte) o.l = c; if (!o.w || c.gewicht > o.w.gewicht) o.w = c;
     if (c.userId === user.uid) { if (!o.ml || c.lengte > o.ml.lengte) o.ml = c; if (!o.mw || c.gewicht > o.mw.gewicht) o.mw = c; } });
   const rec = Object.entries(bySp).filter(([, o]) => o.ml).sort((a, b) => a[0].localeCompare(b[0]));
-  $("#app").innerHTML = `<h1>Profiel</h1><div class="card"><b>${esc(user.displayName || "")}</b><div class="mute">${esc(user.email)}</div><div style="margin-top:10px">${titlesFor(user.uid).map(t => `<span class="tt">${t}</span>`).join("")}</div></div>
+  $("#app").innerHTML = `<h1>Profiel</h1><div class="card"><div class="row" style="justify-content:flex-start;gap:10px">${av(user.uid)}<b>${esc(user.displayName || "")}</b></div><div class="mute">${esc(user.email)}</div><div style="margin-top:10px">${titlesFor(user.uid).map(t => `<span class="tt">${t}</span>`).join("")}</div></div>
+  <h2>Avatar</h2><div class="chips" style="flex-wrap:wrap">${AVATARS.map(a => `<div class="chip" data-av="${a}">${a}</div>`).join("")}</div><label>Of upload een foto</label><input id="avf" type="file" accept="image/*">
+  <h2>Seizoensbadges</h2>${yearsList().map(y => `<div class="card"><b>${y}</b><div style="margin-top:6px">${seasonBadges(y, user.uid).filter(b => b[3]).map(b => b[0] + " " + b[1]).join(" · ") || `<span class="mute">Nog geen</span>`}</div></div>`).join("")}
   <h2>Uiterlijk</h2><div class="mute">Thema</div><div class="chips">${THEMES.map(([k, n]) => `<div class="chip ${prefs.theme === k ? "on" : ""}" data-th="${k}">${n}</div>`).join("")}</div>
   <div class="mute">Weergave</div><div class="chips">${[["dark", "Donker"], ["light", "Licht"], ["auto", "Automatisch"]].map(([k, n]) => `<div class="chip ${prefs.mode === k ? "on" : ""}" data-mo="${k}">${n}</div>`).join("")}</div>
   <p class="mute" style="font-size:.9rem">Je keuze wordt op dit toestel bewaard.</p>
@@ -445,6 +572,8 @@ function meView() {
   <div class="mute">${o.l.userId === user.uid ? "👑 Jij hebt het lengterecord" : `Lengterecord: ${esc(nameOf(o.l.userId))} ${o.l.lengte} cm`}<br>${o.w.userId === user.uid ? "👑 Jij hebt het gewichtsrecord" : `Gewichtsrecord: ${esc(nameOf(o.w.userId))} ${o.w.gewicht} kg`}</div></div>`).join("") : `<p class="mute">Nog geen vangsten.</p>`}
   <h2>Wrapped</h2>${yearsList().map(y => `<button class="ghost" data-wr="${y}" style="margin-top:8px">✨ Wrapped ${y}</button>`).join("")}
   <button class="ghost" id="out" style="margin-top:28px">Uitloggen</button>`;
+  document.querySelectorAll("[data-av]").forEach(b => b.onclick = () => setDoc(doc(db, "users", user.uid), { avatar: b.dataset.av, avatarFoto: null }, { merge: true }));
+  $("#avf").onchange = async e => { const f = e.target.files[0]; if (f) try { await setDoc(doc(db, "users", user.uid), { avatarFoto: await resize(f, 160, 0.7) }, { merge: true }); } catch (x) { alert("De foto kon niet worden opgeslagen."); } };
   document.querySelectorAll("[data-th]").forEach(b => b.onclick = () => { prefs.theme = b.dataset.th; savePrefs(); meView(); });
   document.querySelectorAll("[data-mo]").forEach(b => b.onclick = () => { prefs.mode = b.dataset.mo; savePrefs(); meView(); });
   document.querySelectorAll("[data-wr]").forEach(b => b.onclick = () => wrapped(b.dataset.wr));
